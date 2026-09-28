@@ -4,14 +4,16 @@ import { Trash2, X } from "lucide-react";
 
 type DeleteDialogProps = {
   isOpen: boolean;
-  productName: string;
+  itemName: string;
+  itemType: "product" | "category";
   onClose: () => void;
   onConfirm: () => void;
 };
 
 export default function DeleteDialog({
   isOpen,
-  productName,
+  itemName,
+  itemType,
   onClose,
   onConfirm,
 }: DeleteDialogProps) {
@@ -60,13 +62,13 @@ export default function DeleteDialog({
             id="delete-dialog-title"
             className="mt-5 text-xl font-semibold tracking-tight text-white"
           >
-            Delete product?
+            Delete {itemType}?
           </h2>
 
           <p className="mt-3 text-sm leading-6 text-zinc-400">
             You're about to permanently delete{" "}
             <span className="font-medium text-zinc-200">
-              {productName}
+              {itemName}
             </span>
             . This action cannot be undone.
           </p>
@@ -89,7 +91,7 @@ export default function DeleteDialog({
             className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-500 px-4 text-sm font-semibold text-white shadow-lg shadow-rose-950/20 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-rose-950/30"
           >
             <Trash2 size={16} />
-            Delete Product
+            Delete {itemType}
           </button>
         </div>
       </div>

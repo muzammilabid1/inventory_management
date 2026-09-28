@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { useState } from "react";
-import { Save } from "lucide-react";
+import { Info, Save } from "lucide-react";
 
 type ProductFormData = {
   name: string;
@@ -33,6 +33,7 @@ export default function ProductForm({
   const [formData, setFormData] = useState<ProductFormData>(
     initialData ?? defaultFormData,
   );
+  const [showDemoNotice, setShowDemoNotice] = useState(false);
 
   function handleChange(
     event: React.ChangeEvent<
@@ -41,6 +42,7 @@ export default function ProductForm({
   ) {
     const { name, value } = event.target;
 
+    setShowDemoNotice(false);
     setFormData((current) => ({
       ...current,
       [name]: value,
@@ -49,8 +51,7 @@ export default function ProductForm({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    console.log(formData);
+    setShowDemoNotice(true);
   }
 
   return (
@@ -85,6 +86,7 @@ export default function ProductForm({
               type="text"
               value={formData.name}
               onChange={handleChange}
+              required
               placeholder="e.g. Laptop Pro"
               className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm text-zinc-100 outline-none transition-all placeholder:text-zinc-600 focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10"
             />
@@ -121,6 +123,7 @@ export default function ProductForm({
               type="text"
               value={formData.sku}
               onChange={handleChange}
+              required
               placeholder="e.g. LP-2026-001"
               className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm text-zinc-100 outline-none transition-all placeholder:text-zinc-600 focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10"
             />
@@ -138,6 +141,7 @@ export default function ProductForm({
               name="category"
               value={formData.category}
               onChange={handleChange}
+              required
               className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm text-zinc-100 outline-none transition-all focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10"
             >
               <option value="">Select category</option>
@@ -162,6 +166,7 @@ export default function ProductForm({
               step="0.01"
               value={formData.price}
               onChange={handleChange}
+              required
               placeholder="0.00"
               className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm text-zinc-100 outline-none transition-all placeholder:text-zinc-600 focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10"
             />
@@ -181,6 +186,7 @@ export default function ProductForm({
               min="0"
               value={formData.quantity}
               onChange={handleChange}
+              required
               placeholder="0"
               className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm text-zinc-100 outline-none transition-all placeholder:text-zinc-600 focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10"
             />
@@ -207,6 +213,18 @@ export default function ProductForm({
           </div>
         </div>
       </div>
+      {showDemoNotice && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mx-6 mb-5 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm leading-6 text-amber-200 sm:mx-8"
+        >
+          <Info size={17} className="mt-1 shrink-0 text-amber-400" />
+          {initialData
+            ? "Product details are ready to update, but changes aren’t saved until the backend is connected."
+            : "The product is ready to add, but it won’t be saved until the backend is connected."}
+        </p>
+      )}
       <div className="flex flex-col-reverse gap-3 border-t border-zinc-800/80 bg-zinc-950/30 px-6 py-5 sm:flex-row sm:justify-end sm:px-8">
         <Link
           href="/products"

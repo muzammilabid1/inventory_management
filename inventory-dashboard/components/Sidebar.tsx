@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { X } from "lucide-react";
+import { LogOut, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 
 type SidebarProps = {
@@ -12,7 +12,7 @@ type SidebarProps = {
 const navigationItems = [
   {
     label: "Dashboard",
-    href: "/",
+    href: "/dashboard",
   },
   {
     label: "Products",
@@ -36,7 +36,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
       <div className="flex h-full min-h-screen flex-col">
         <div className="flex h-20 items-center justify-between border-b border-zinc-800/80 px-6">
           <Link
-            href="/"
+            href="/dashboard"
             onClick={onClose}
             className="group flex items-center gap-3"
           >
@@ -70,10 +70,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
           <div className="space-y-2">
             {navigationItems.map((item) => {
-              const isActive =
-                item.href === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(item.href);
+              const isActive = pathname.startsWith(item.href);
 
               return (
                 <Link
@@ -117,6 +114,18 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               Keep your products, categories, and stock organized in one place.
             </p>
           </div>
+
+          <Link
+            href="/login"
+            onClick={onClose}
+            className="group mt-4 inline-flex h-11 w-full items-center gap-3 rounded-xl border border-zinc-800/80 px-4 text-sm font-medium text-zinc-400 transition-all duration-200 hover:border-rose-500/25 hover:bg-rose-500/[0.06] hover:text-rose-300"
+          >
+            <LogOut
+              size={17}
+              className="transition-transform duration-200 group-hover:translate-x-0.5"
+            />
+            Sign out
+          </Link>
         </div>
       </div>
     </aside>

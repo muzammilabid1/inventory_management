@@ -1,8 +1,24 @@
+"use client";
+
 import Link from "next/link";
-import { ChevronDown, Plus, Search } from "lucide-react";
+import { Check, ChevronDown, Plus, Search } from "lucide-react";
+import { useState } from "react";
 
 import ProductActions from "@/components/ProductActions";
 import StatusBadge from "@/components/StatusBadge";
+
+type ProductStatusFilter =
+  | "All"
+  | "In Stock"
+  | "Low Stock"
+  | "Out of Stock";
+
+const statusFilters: ProductStatusFilter[] = [
+  "All",
+  "In Stock",
+  "Low Stock",
+  "Out of Stock",
+];
 
 const products = [
   {
@@ -53,6 +69,19 @@ const products = [
 ];
 
 export default function ProductsPage() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeStatus, setActiveStatus] = useState<ProductStatusFilter>("All");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = [product.name, product.sku, product.category].some(
+      (value) => value.toLowerCase().includes(normalizedQuery),
+    );
+    const matchesStatus = activeStatus === "All" || product.status === activeStatus;
+
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <>
       <header className="flex h-20 items-center border-b border-zinc-800/80 pl-[72px] pr-6 md:px-6 lg:px-10">
@@ -114,18 +143,53 @@ export default function ProductsPage() {
 
                 <input
                   type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
                   placeholder="Search products..."
+                  aria-label="Search products by name, SKU, or category"
                   className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 pl-10 pr-4 text-sm text-zinc-100 outline-none transition-all duration-200 placeholder:text-zinc-600 focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10 sm:w-64"
                 />
               </div>
 
-              <button
-                type="button"
-                className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm font-medium text-zinc-300 transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white"
-              >
-                Filter
-                <ChevronDown size={16} />
-              </button>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setIsFilterOpen((current) => !current)}
+                  aria-expanded={isFilterOpen}
+                  aria-haspopup="true"
+                  aria-label={`Filter products by status. Current filter: ${activeStatus}`}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm font-medium text-zinc-300 transition-all duration-200 hover:border-zinc-600 hover:bg-zinc-800 hover:text-white"
+                >
+                  {activeStatus === "All" ? "Filter" : activeStatus}
+                  <ChevronDown size={16} />
+                </button>
+
+                {isFilterOpen && (
+                  <div
+                    role="group"
+                    aria-label="Filter products by stock status"
+                    className="absolute right-0 top-full z-20 mt-2 w-48 overflow-hidden rounded-xl border border-zinc-700/80 bg-zinc-900 p-1.5 shadow-2xl shadow-black/40"
+                  >
+                    {statusFilters.map((status) => (
+                      <button
+                        key={status}
+                        type="button"
+                        aria-pressed={activeStatus === status}
+                        onClick={() => {
+                          setActiveStatus(status);
+                          setIsFilterOpen(false);
+                        }}
+                        className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+                      >
+                        {status}
+                        {activeStatus === status && (
+                          <Check size={15} className="text-emerald-400" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -160,7 +224,7 @@ export default function ProductsPage() {
               </thead>
 
               <tbody className="divide-y divide-zinc-800/70">
-                {products.map((product) => (
+                {filteredProducts.map((product) => (
                   <tr
                     key={product.id}
                     className="group transition-colors duration-200 hover:bg-zinc-800/20"
@@ -209,13 +273,25 @@ export default function ProductsPage() {
                     </td>
                   </tr>
                 ))}
+                {filteredProducts.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-14 text-center">
+                      <p className="text-sm font-medium text-zinc-300">
+                        No products found
+                      </p>
+                      <p className="mt-1.5 text-sm text-zinc-500">
+                        Try another search or choose a different status filter.
+                      </p>
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
 
           <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-xs text-zinc-600">
-              Showing {products.length} of {products.length} products
+              Showing {filteredProducts.length} of {products.length} products
             </p>
 
             <p className="text-xs text-zinc-600">

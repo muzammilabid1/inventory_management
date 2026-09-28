@@ -87,7 +87,8 @@ export default function ProductActions({
 
       <DeleteDialog
         isOpen={isDeleteDialogOpen}
-        productName={productName}
+        itemName={productName}
+        itemType="product"
         onClose={() => setIsDeleteDialogOpen(false)}
         onConfirm={handleDeleteConfirm}
       />

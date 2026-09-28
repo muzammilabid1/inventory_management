@@ -47,7 +47,8 @@ export default function CategoryActions({
 
       <DeleteDialog
         isOpen={isDeleteDialogOpen}
-        productName={categoryName}
+        itemName={categoryName}
+        itemType="category"
         onClose={() => setIsDeleteDialogOpen(false)}
         onConfirm={handleDeleteConfirm}
       />

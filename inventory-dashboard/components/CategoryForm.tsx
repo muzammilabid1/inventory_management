@@ -1,6 +1,6 @@
 "use client";
 
-import { Save } from "lucide-react";
+import { Info, Save } from "lucide-react";
 import { useState } from "react";
 
 type CategoryFormData = {
@@ -23,12 +23,14 @@ export default function CategoryForm({
   const [formData, setFormData] = useState<CategoryFormData>(
     initialData ?? defaultFormData,
   );
+  const [showDemoNotice, setShowDemoNotice] = useState(false);
 
   function handleChange(
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) {
     const { name, value } = event.target;
 
+    setShowDemoNotice(false);
     setFormData((current) => ({
       ...current,
       [name]: value,
@@ -37,9 +39,7 @@ export default function CategoryForm({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-
-    console.log(formData);
-    setFormData(defaultFormData);
+    setShowDemoNotice(true);
   }
 
   return (
@@ -90,6 +90,18 @@ export default function CategoryForm({
           </div>
         </div>
       </div>
+      {showDemoNotice && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="mx-6 mb-5 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm leading-6 text-amber-200 sm:mx-8"
+        >
+          <Info size={17} className="mt-1 shrink-0 text-amber-400" />
+          {initialData
+            ? "Category details are ready to update, but changes aren’t saved until the backend is connected."
+            : "The category is ready to add, but it won’t be saved until the backend is connected."}
+        </p>
+      )}
       <div className="flex flex-col-reverse gap-3 bg-zinc-950/30 p-6 sm:flex-row sm:items-center sm:justify-end sm:p-8">
         <button
           type="button"
