@@ -10,7 +10,7 @@
    - `inventory-api/db/migrations/004_auth_challenge_permissions.sql` (connect as the PostgreSQL administrator)
    - `inventory-api/db/migrations/005_refresh_tokens.sql` (connect as the PostgreSQL administrator)
    - `inventory-api/db/migrations/006_refresh_token_permissions.sql` (connect as the PostgreSQL administrator)
-3. Copy `inventory-api/.env.example` to `inventory-api/.env` and fill in the database credentials, a long random `SESSION_SECRET`, your Resend API key, and a sender address verified with Resend.
+3. Copy `inventory-api/.env.example` to `inventory-api/.env` and fill in the database credentials, a long random `SESSION_SECRET`, and `GMAIL_USER`. Use a dedicated Google account, turn on 2-Step Verification, then create an App Password in [Google Account security settings](https://myaccount.google.com/apppasswords). Put that generated password in `GMAIL_APP_PASSWORD`; never use the account's regular password or expose either credential in the dashboard.
 4. Copy `inventory-dashboard/.env.example` to `inventory-dashboard/.env.local`. Set `SESSION_SECRET` to the same value as the API. The default API URL is already correct for local development.
 5. Start the API in one terminal:
 
@@ -30,4 +30,4 @@
 
 Open `http://localhost:3000`. Registration and each password sign in require a six digit email code. The app uses a 15 minute access token and a rotating refresh token that expires after 30 days. Password recovery codes expire after 15 minutes; after verifying a code, set a new password and confirm it on the recovery page. Password reset revokes all active refresh sessions for that account.
 
-The database stores only hashes of one time codes and reset tokens. The password recovery request response does not reveal whether an email is registered. In production, configure the same strong session secret in both applications and use a sender domain verified with Resend.
+The database stores only hashes of one time codes and reset tokens. The password recovery request response does not reveal whether an email is registered. Gmail SMTP lets this development setup send from the configured Google account without a custom domain, but it has account sending limits and is not a dependable bulk or high volume production mail service. For production, use a transactional email provider and a sender domain you control; configure mail credentials only on the API host.

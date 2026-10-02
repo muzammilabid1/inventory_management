@@ -46,7 +46,7 @@ router.post("/api/auth/register", validateBody(registerBody), requireEmailDelive
     } catch (deliveryError) {
       console.error("Registration email could not be delivered:", deliveryError.message);
       return response.status(503).json({
-        error: "Your account was created, but we could not send the verification code. Configure Resend and submit the same details to request another code.",
+        error: "Your account was created, but we could not send the verification code. Check the Gmail email configuration and submit the same details to request another code.",
         ...(process.env.NODE_ENV === "production" ? {} : { debug: deliveryError.message }),
       });
     }
@@ -79,7 +79,7 @@ router.post("/api/auth/register", validateBody(registerBody), requireEmailDelive
       } catch (deliveryError) {
         console.error("Registration retry email could not be delivered:", deliveryError.message);
         return response.status(503).json({
-          error: "The verification code could not be sent. Check the Resend configuration and try again.",
+          error: "The verification code could not be sent. Check the Gmail email configuration and try again.",
           ...(process.env.NODE_ENV === "production" ? {} : { debug: deliveryError.message }),
         });
       }

@@ -16,7 +16,7 @@ The API is an Express server backed by PostgreSQL. Run it from this folder with 
 | `src/middleware/validate.js` | Parses request bodies and route parameters with Zod before handlers run. |
 | `src/config/database.js` | Validates database settings and creates the PostgreSQL connection pool. |
 | `src/security/auth.js` | Password hashing, one time value hashing, session cookies, and the authentication guard. |
-| `src/services/email.js` | Renders responsive MJML messages and sends them through Resend. |
+| `src/services/email.js` | Renders responsive MJML messages and sends them through Gmail SMTP with Nodemailer. |
 | `src/validation/schemas.js` | Named Zod schemas for authentication payloads, product payloads, and product IDs. |
 | `db/migrations/` | Database schema and application permission changes, applied in numeric order. |
 
@@ -50,6 +50,6 @@ Request rules live in `src/validation/schemas.js`. Route handlers attach them wi
 
 ## Environment and database
 
-Copy `.env.example` to `.env` and fill in the database settings, `SESSION_SECRET`, `RESEND_API_KEY`, and an `EMAIL_FROM` address verified with Resend. Keep the same `SESSION_SECRET` in the dashboard’s `.env.local` so both apps can validate the session cookie.
+Copy `.env.example` to `.env` and fill in the database settings, `SESSION_SECRET`, `GMAIL_USER`, and `GMAIL_APP_PASSWORD`. Use a dedicated Google account for the app. In its [Google Account security settings](https://myaccount.google.com/apppasswords), turn on 2-Step Verification, create an App Password for the API, and use that generated password here—not the account's regular password. `EMAIL_FROM` is optional and should use the same address as `GMAIL_USER` unless you configured an authorized Gmail send-as alias. Keep the same `SESSION_SECRET` in the dashboard’s `.env.local` so both apps can validate the session cookie. Keep these email credentials on the API server only. Google may not offer App Passwords to accounts under some security programs or organization policies.
 
 Create the database and apply migrations `001` through `006` in numeric order. Run migrations `002`, `004`, `005`, and `006` as `postgres`; migration `005` creates the new refresh-token tables and migration `006` grants the API role access to them. See the repository [setup guide](../README.md) for the full local startup steps.

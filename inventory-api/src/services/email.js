@@ -1,17 +1,24 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import mjml2html from "mjml";
 
 export class EmailDeliveryError extends Error {
   statusCode = 503;
 }
 
-const resend = process.env.RESEND_API_KEY ? new Resend(process.env.RESEND_API_KEY) : null;
-const from = process.env.EMAIL_FROM || "Inventory <onboarding@resend.dev>";
+const gmailUser = process.env.GMAIL_USER?.trim();
+const gmailAppPassword = process.env.GMAIL_APP_PASSWORD?.replace(/\s/g, "");
+const mailer = gmailUser && gmailAppPassword
+  ? nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: gmailUser, pass: gmailAppPassword },
+    })
+  : null;
+const from = process.env.EMAIL_FROM?.trim() || (gmailUser ? `Inventory Management <${gmailUser}>` : "");
 
 export function requireEmailDelivery(_request, response, next) {
-  if (!resend) {
+  if (!mailer || !from) {
     return response.status(503).json({
-      error: "Email delivery is not configured. Add RESEND_API_KEY to inventory-api/.env and restart the API.",
+      error: "Email delivery is not configured. Add GMAIL_USER and GMAIL_APP_PASSWORD to inventory-api/.env, then restart the API.",
     });
   }
   next();
@@ -25,7 +32,7 @@ async function renderCodeEmail({ title, intro, code, expiryMinutes }) {
 }
 
 export async function sendAuthCodeEmail({ to, purpose, code, expiryMinutes = 10 }) {
-  if (!resend) throw new EmailDeliveryError("Email delivery is not configured.");
+  if (!mailer || !from) throw new EmailDeliveryError("Email delivery is not configured.");
   const recovery = purpose === "recovery";
   const title = recovery ? "Reset your password" : purpose === "register" ? "Verify your email" : "Your sign in code";
   const intro = recovery
@@ -33,13 +40,16 @@ export async function sendAuthCodeEmail({ to, purpose, code, expiryMinutes = 10 
     : purpose === "register"
       ? "Enter this code in the app to verify your email address and finish creating your account."
       : "Enter this code in the app to complete your sign in.";
-  const { data, error } = await resend.emails.send({
-    from,
-    to,
-    subject: title,
-    html: await renderCodeEmail({ title, intro, code, expiryMinutes }),
-    attachments: [],
-  });
-  if (error) throw new EmailDeliveryError(`Email delivery failed: ${error.message}`);
-  return data;
+  try {
+    const result = await mailer.sendMail({
+      from,
+      to,
+      subject: title,
+      html: await renderCodeEmail({ title, intro, code, expiryMinutes }),
+    });
+    return { messageId: result.messageId };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown SMTP error.";
+    throw new EmailDeliveryError(`Email delivery failed: ${message}`);
+  }
 }
