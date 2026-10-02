@@ -41,6 +41,7 @@ export default function ProductForm({
   const [isLoading, setIsLoading] = useState(isEdit);
   const [isProductLoaded, setIsProductLoaded] = useState(!isEdit);
   const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [categoryLoadError, setCategoryLoadError] = useState("");
 
   useEffect(() => {
@@ -55,6 +56,9 @@ export default function ProductForm({
         if (!controller.signal.aborted) {
           setCategoryLoadError(error instanceof Error ? error.message : "Could not load categories.");
         }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoadingCategories(false);
       });
 
     return () => controller.abort();
@@ -122,6 +126,15 @@ export default function ProductForm({
     if (!isProductLoaded) {
       return;
     }
+    if (isLoadingCategories || categoryLoadError || categories.length === 0) {
+      setErrorMessage(
+        categoryLoadError ||
+          (categories.length === 0
+            ? "Add a category before creating a product."
+            : "Categories are still loading. Please try again."),
+      );
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -156,6 +169,40 @@ export default function ProductForm({
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (!isEdit && isLoadingCategories) {
+    return (
+      <p role="status" className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-6 text-sm text-zinc-300">
+        Loading categories...
+      </p>
+    );
+  }
+
+  if (!isEdit && categoryLoadError) {
+    return (
+      <section role="alert" className="rounded-2xl border border-amber-500/20 bg-zinc-900/50 p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-white">Could not load categories</h2>
+        <p className="mt-2 text-sm text-zinc-400">{categoryLoadError}</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link href="/categories" className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-zinc-950">Open categories</Link>
+          <Link href="/products" className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-700 px-5 text-sm font-medium text-zinc-300">Back to products</Link>
+        </div>
+      </section>
+    );
+  }
+
+  if (!isEdit && categories.length === 0) {
+    return (
+      <section className="rounded-2xl border border-zinc-800/80 bg-zinc-900/50 p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-white">Add a category first</h2>
+        <p className="mt-2 text-sm leading-6 text-zinc-400">Create a category before adding products. You can organize your products with categories that fit your inventory.</p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <Link href="/categories/new" className="inline-flex h-11 items-center justify-center rounded-xl bg-emerald-500 px-5 text-sm font-semibold text-zinc-950">Add your first category</Link>
+          <Link href="/products" className="inline-flex h-11 items-center justify-center rounded-xl border border-zinc-700 px-5 text-sm font-medium text-zinc-300">Back to products</Link>
+        </div>
+      </section>
+    );
   }
 
   return (
@@ -249,13 +296,14 @@ export default function ProductForm({
               value={formData.category}
               onChange={handleChange}
               required
+              disabled={isLoadingCategories || Boolean(categoryLoadError) || categories.length === 0}
               className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm text-zinc-100 outline-none transition-all focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10"
             >
               <option value="">Select category</option>
               {categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
             </select>
+            {isLoadingCategories && <p role="status" className="mt-2 text-xs text-zinc-500">Loading categories...</p>}
             {categoryLoadError && <p role="alert" className="mt-2 text-xs text-rose-300">{categoryLoadError}</p>}
-            {!categoryLoadError && categories.length === 0 && <p className="mt-2 text-xs text-zinc-500">No categories yet. <Link href="/categories/new" className="text-emerald-400 hover:text-emerald-300">Add a category</Link>.</p>}
           </div>
           <div>
             <label
@@ -339,7 +387,7 @@ export default function ProductForm({
 
         <button
           type="submit"
-          disabled={isSubmitting || isLoading || !isProductLoaded}
+          disabled={isSubmitting || isLoading || !isProductLoaded || isLoadingCategories || Boolean(categoryLoadError) || categories.length === 0}
           className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-5 text-sm font-semibold text-zinc-950 shadow-lg shadow-emerald-950/30 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/30 disabled:cursor-wait disabled:opacity-70"
         >
           <Save size={17} />

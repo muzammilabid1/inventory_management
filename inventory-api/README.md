@@ -10,6 +10,7 @@ The API is an Express server backed by PostgreSQL. Run it from this folder with 
 | `src/app.js` | Builds the Express app and connects middleware and route modules. |
 | `src/routes/auth.routes.js` | Registration, sign in, email verification, password recovery, session lookup, and sign out. |
 | `src/routes/products.routes.js` | Authenticated product list, details, create, update, and delete endpoints. |
+| `src/routes/settings.routes.js` | Read and update the signed-in user's organization profile. |
 | `src/routes/health.routes.js` | API and database health endpoints. |
 | `src/middleware/cors.js` | Allows the configured dashboard origin to call the API with cookies. |
 | `src/middleware/error-handler.js` | Converts unhandled route errors into the API's standard error response. |
@@ -39,6 +40,7 @@ The API is an Express server backed by PostgreSQL. Run it from this folder with 
 | `GET` | `/api/categories/:id` | Signed in | Read one category and its product count. |
 | `PUT` | `/api/categories/:id` | Signed in | Update a category name and description. |
 | `DELETE` | `/api/categories/:id` | Signed in | Delete an unused category. |
+| `GET`, `PUT` | `/api/settings` | Signed in | Read or update the user's organization name, phone, and address. |
 | `GET` | `/api/health` | Public | Check that the API process is responding. |
 | `GET` | `/api/health/database` | Public | Check PostgreSQL connectivity. |
 | `GET`, `POST` | `/api/products` | Signed in | List or create products owned by the current account. |
@@ -48,8 +50,10 @@ The API is an Express server backed by PostgreSQL. Run it from this folder with 
 
 Request rules live in `src/validation/schemas.js`. Route handlers attach them with `validateBody(...)` or `validateParams(...)`, so invalid input is rejected before database work begins. A validation error returns a `400` response with an `error` message and a `details` array containing the field and rule that failed.
 
+New accounts start with no categories. A signed-in user must create a category before adding products; product categories are scoped to that user's account.
+
 ## Environment and database
 
 Copy `.env.example` to `.env` and fill in the database settings, `SESSION_SECRET`, `GMAIL_USER`, and `GMAIL_APP_PASSWORD`. Use a dedicated Google account for the app. In its [Google Account security settings](https://myaccount.google.com/apppasswords), turn on 2-Step Verification, create an App Password for the API, and use that generated password here—not the account's regular password. `EMAIL_FROM` is optional and should use the same address as `GMAIL_USER` unless you configured an authorized Gmail send-as alias. Keep the same `SESSION_SECRET` in the dashboard’s `.env.local` so both apps can validate the session cookie. Keep these email credentials on the API server only. Google may not offer App Passwords to accounts under some security programs or organization policies.
 
-Create the database and apply migrations `001` through `006` in numeric order. Run migrations `002`, `004`, `005`, and `006` as `postgres`; migration `005` creates the new refresh-token tables and migration `006` grants the API role access to them. See the repository [setup guide](../README.md) for the full local startup steps.
+Create the database and apply migrations `001` through `008` in numeric order. Run migrations `002`, `004`, `005`, `006`, and `008` as `postgres`; migrations `007` and `008` create the organization settings table and grant the API role access to it. See the repository [setup guide](../README.md) for the full local startup steps.

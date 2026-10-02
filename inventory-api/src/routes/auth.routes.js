@@ -25,14 +25,6 @@ router.post("/api/auth/register", validateBody(registerBody), requireEmailDelive
     );
     const user = userResult.rows[0];
 
-    await client.query(
-      `INSERT INTO categories (user_id, name, description)
-       VALUES
-         ($1, 'Electronics', 'Computers, laptops, and electronic devices.'),
-         ($1, 'Audio', 'Headphones, speakers, and audio equipment.'),
-         ($1, 'Accessories', 'Cables, chargers, cases, and accessories.')`,
-      [user.id],
-    );
     const code = createOneTimeCode();
     await client.query("DELETE FROM auth_challenges WHERE user_id = $1 AND purpose = 'register'", [user.id]);
     await client.query(

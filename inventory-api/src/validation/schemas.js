@@ -60,6 +60,12 @@ export const categoryBody = z.object({
   description: z.string().trim().max(2000, "Description must be 2000 characters or fewer.").default(""),
 });
 
+export const organizationSettingsBody = z.object({
+  organizationName: z.string().trim().min(1, "Organization name is required.").max(160, "Organization name must be 160 characters or fewer."),
+  phone: z.string().trim().max(40, "Phone number must be 40 characters or fewer.").default(""),
+  address: z.string().trim().max(500, "Address must be 500 characters or fewer.").default(""),
+});
+
 export const categoryIdParams = z.object({
   id: z
     .string()

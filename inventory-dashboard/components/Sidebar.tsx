@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LogOut, X } from "lucide-react";
+import { LogOut, Settings, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useReducer } from "react";
 
@@ -19,7 +19,7 @@ type SidebarProps = {
   onClose: () => void;
 };
 
-const navigationItems = [
+const navigationItems: { label: string; href: string; icon?: typeof Settings }[] = [
   {
     label: "Dashboard",
     href: "/dashboard",
@@ -31,6 +31,11 @@ const navigationItems = [
   {
     label: "Categories",
     href: "/categories",
+  },
+  {
+    label: "Settings",
+    href: "/settings",
+    icon: Settings,
   },
 ];
 
@@ -96,6 +101,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           <div className="space-y-2">
             {navigationItems.map((item) => {
               const isActive = pathname.startsWith(item.href);
+              const Icon = item.icon;
 
               return (
                 <Link
@@ -121,6 +127,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                         : "bg-zinc-700 group-hover:bg-zinc-500"
                     }`}
                   />
+
+                  {Icon && <Icon size={17} className="shrink-0" />}
 
                   <span>{item.label}</span>
                 </Link>
