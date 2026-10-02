@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useReducer } from "react";
 import { ArrowRight, Boxes, Eye, EyeOff, Info, LockKeyhole, Mail, UserRound } from "lucide-react";
 
 type AuthMode = "login" | "register";
@@ -13,14 +14,117 @@ type AuthFormProps = {
 const inputClassName =
   "h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950/70 pl-11 pr-4 text-sm text-zinc-100 outline-none transition-all duration-200 placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/10";
 
-export default function AuthForm({ mode }: AuthFormProps) {
-  const isRegister = mode === "register";
-  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [showDemoNotice, setShowDemoNotice] = useState(false);
+type AuthFormState = {
+  isPasswordVisible: boolean;
+  errorMessage: string;
+  isSubmitting: boolean;
+  verificationStep: boolean;
+  email: string;
+  resendMessage: string;
+  isResending: boolean;
+};
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+type AuthFormAction =
+  | { type: "toggle-password" }
+  | { type: "error"; message: string }
+  | { type: "submit-status"; value: boolean }
+  | { type: "challenge"; email: string }
+  | { type: "show-credentials" }
+  | { type: "resend-status"; value: boolean }
+  | { type: "resend-message"; message: string };
+
+const initialState: AuthFormState = {
+  isPasswordVisible: false,
+  errorMessage: "",
+  isSubmitting: false,
+  verificationStep: false,
+  email: "",
+  resendMessage: "",
+  isResending: false,
+};
+
+function authFormReducer(state: AuthFormState, action: AuthFormAction): AuthFormState {
+  switch (action.type) {
+    case "toggle-password": return { ...state, isPasswordVisible: !state.isPasswordVisible };
+    case "error": return { ...state, errorMessage: action.message };
+    case "submit-status": return { ...state, isSubmitting: action.value };
+    case "challenge": return { ...state, email: action.email, verificationStep: true, errorMessage: "" };
+    case "show-credentials": return { ...state, verificationStep: false, errorMessage: "", resendMessage: "" };
+    case "resend-status": return { ...state, isResending: action.value };
+    case "resend-message": return { ...state, resendMessage: action.message };
+  }
+}
+
+export default function AuthForm({ mode }: AuthFormProps) {
+  const router = useRouter();
+  const isRegister = mode === "register";
+  const [state, dispatch] = useReducer(authFormReducer, initialState);
+  const { isPasswordVisible, errorMessage, isSubmitting, verificationStep, email, resendMessage, isResending } = state;
+
+  async function resendRegistrationCode() {
+    dispatch({ type: "resend-message", message: "" });
+    dispatch({ type: "resend-status", value: true });
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
+      const response = await fetch(`${apiUrl}/api/auth/resend-registration-code`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Could not send another code.");
+      dispatch({ type: "resend-message", message: result.message });
+    } catch (error) {
+      dispatch({ type: "resend-message", message: error instanceof Error ? error.message : "Could not send another code." });
+    } finally { dispatch({ type: "resend-status", value: false }); }
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setShowDemoNotice(true);
+    dispatch({ type: "error", message: "" });
+    dispatch({ type: "submit-status", value: true });
+
+    const formData = new FormData(event.currentTarget);
+    const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
+
+    try {
+      const code = formData.get("code");
+      const response = await fetch(
+        `${apiUrl}/api/auth/${verificationStep ? "verify-code" : isRegister ? "register" : "login"}`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fullName: formData.get("name"),
+            email: verificationStep ? email : formData.get("email"),
+            password: formData.get("password"),
+            code,
+            purpose: isRegister ? "register" : "login",
+          }),
+        },
+      );
+
+      const result = await response.json();
+      if (!response.ok) {
+        const message = result.error || "Could not sign in. Please try again.";
+        throw new Error(result.debug ? `${message} (${result.debug})` : message);
+      }
+
+      if (result.challengeRequired) {
+        dispatch({ type: "challenge", email: result.email });
+        return;
+      }
+      router.push("/dashboard");
+      router.refresh();
+    } catch (error) {
+      dispatch({ type: "error", message:
+        error instanceof Error
+          ? error.message
+          : "Could not reach the API. Make sure it is running and try again.",
+      });
+    } finally {
+      dispatch({ type: "submit-status", value: false });
+    }
   }
 
   return (
@@ -87,11 +191,13 @@ export default function AuthForm({ mode }: AuthFormProps) {
             <p className="mt-3 text-sm leading-6 text-zinc-400">
               {isRegister
                 ? "Set up your workspace and bring your inventory into focus."
-                : "Enter your details to continue to your inventory workspace."}
+                : verificationStep
+                  ? `Enter the verification code sent to ${email}.`
+                  : "Enter your details to continue to your inventory workspace."}
             </p>
 
             <form onSubmit={handleSubmit} className="mt-8 space-y-5">
-              {isRegister && (
+              {!verificationStep && isRegister && (
                 <div>
                   <label htmlFor="name" className="mb-2 block text-sm font-medium text-zinc-300">Full name</label>
                   <div className="relative">
@@ -101,15 +207,15 @@ export default function AuthForm({ mode }: AuthFormProps) {
                 </div>
               )}
 
-              <div>
+              {!verificationStep && <div>
                 <label htmlFor="email" className="mb-2 block text-sm font-medium text-zinc-300">Email address</label>
                 <div className="relative">
                   <Mail size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-600" />
                   <input id="email" name="email" type="email" autoComplete="email" required placeholder="you@company.com" className={inputClassName} />
                 </div>
-              </div>
+              </div>}
 
-              <div>
+              {!verificationStep ? <div>
                 <div className="mb-2 flex items-center justify-between">
                   <label htmlFor="password" className="block text-sm font-medium text-zinc-300">Password</label>
                   {isRegister && <span className="text-xs text-zinc-600">At least 8 characters</span>}
@@ -119,27 +225,38 @@ export default function AuthForm({ mode }: AuthFormProps) {
                   <input id="password" name="password" type={isPasswordVisible ? "text" : "password"} autoComplete={isRegister ? "new-password" : "current-password"} minLength={isRegister ? 8 : undefined} required placeholder="Enter your password" className={`${inputClassName} pr-12`} />
                   <button
                     type="button"
-                    onClick={() => setIsPasswordVisible((visible) => !visible)}
+                    onClick={() => dispatch({ type: "toggle-password" })}
                     aria-label={isPasswordVisible ? "Hide password" : "Show password"}
                     className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-zinc-800 hover:text-emerald-300"
                   >
                     {isPasswordVisible ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
                 </div>
-              </div>
+              </div> : <div>
+                <label htmlFor="code" className="mb-2 block text-sm font-medium text-zinc-300">Verification code</label>
+                <input id="code" name="code" type="text" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" required placeholder="6 digit code" className={inputClassName} />
+                <p className="mt-2 text-xs text-zinc-500">Enter the code we sent to {email}. It expires in 10 minutes.</p>
+                {isRegister && <button type="button" onClick={resendRegistrationCode} disabled={isResending} className="mt-3 block text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-50">{isResending ? "Sending…" : "Resend verification code"}</button>}
+                {resendMessage && <p role="status" className="mt-2 text-xs text-zinc-400">{resendMessage}</p>}
+                <button type="button" onClick={() => dispatch({ type: "show-credentials" })} className="mt-3 text-xs text-emerald-400 hover:text-emerald-300">Use a different email or password</button>
+              </div>}
 
-              {showDemoNotice && (
+              {errorMessage && (
                 <p role="status" aria-live="polite" className="flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm leading-6 text-amber-200">
                   <Info size={17} className="mt-1 shrink-0 text-amber-400" />
-                  This screen is a frontend preview. Account access will be enabled when authentication is connected.
+                  {errorMessage}
                 </p>
               )}
 
-              <button type="submit" className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-5 text-sm font-semibold text-zinc-950 shadow-lg shadow-emerald-950/30 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/30">
-                {isRegister ? "Create account" : "Sign in"}
+              <button type="submit" disabled={isSubmitting} className="group inline-flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-5 text-sm font-semibold text-zinc-950 shadow-lg shadow-emerald-950/30 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/30 disabled:cursor-wait disabled:opacity-70">
+                {isSubmitting
+                  ? isRegister ? "Creating account..." : "Signing in..."
+                  : verificationStep ? "Verify and continue" : isRegister ? "Create account" : "Sign in"}
                 <ArrowRight size={16} className="transition-transform duration-300 group-hover:translate-x-1" />
               </button>
             </form>
+
+            {!isRegister && !verificationStep && <Link href="/forgot-password" className="mt-4 block text-right text-sm font-medium text-emerald-400 hover:text-emerald-300">Forgot password?</Link>}
 
             <p className="mt-7 text-center text-sm text-zinc-500">
               {isRegister ? "Already have an account?" : "New to Inventory?"}{" "}

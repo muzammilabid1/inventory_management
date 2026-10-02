@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Check, ChevronDown, Plus, Search } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import ProductActions from "@/components/ProductActions";
 import StatusBadge from "@/components/StatusBadge";
@@ -20,58 +20,58 @@ const statusFilters: ProductStatusFilter[] = [
   "Out of Stock",
 ];
 
-const products = [
-  {
-    id: "1",
-    name: "Laptop Pro",
-    sku: "LP-2026-001",
-    category: "Electronics",
-    price: "$1,249.00",
-    stock: 24,
-    status: "In Stock" as const,
-  },
-  {
-    id: "2",
-    name: "Wireless Headphones",
-    sku: "WH-2026-014",
-    category: "Audio",
-    price: "$149.00",
-    stock: 8,
-    status: "Low Stock" as const,
-  },
-  {
-    id: "3",
-    name: "Mechanical Keyboard",
-    sku: "MK-2026-023",
-    category: "Accessories",
-    price: "$89.00",
-    stock: 17,
-    status: "In Stock" as const,
-  },
-  {
-    id: "4",
-    name: "USB-C Hub",
-    sku: "UC-2026-031",
-    category: "Accessories",
-    price: "$39.00",
-    stock: 0,
-    status: "Out of Stock" as const,
-  },
-  {
-    id: "5",
-    name: "4K Monitor",
-    sku: "4K-2026-045",
-    category: "Electronics",
-    price: "$499.00",
-    stock: 12,
-    status: "In Stock" as const,
-  },
-];
+type Product = {
+  id: string;
+  name: string;
+  sku: string;
+  category: string;
+  price: string;
+  stock: number;
+  status: Exclude<ProductStatusFilter, "All">;
+};
+
+const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
 
 export default function ProductsPage() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeStatus, setActiveStatus] = useState<ProductStatusFilter>("All");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadProducts() {
+      try {
+        const response = await fetch(`${apiUrl}/api/products`, {
+          signal: controller.signal,
+          credentials: "include",
+        });
+
+        if (!response.ok) {
+          throw new Error("The server could not load products.");
+        }
+
+        const data: { products: Product[] } = await response.json();
+        setProducts(data.products);
+      } catch {
+        if (!controller.signal.aborted) {
+          setLoadError("Could not load products. Check that the API is running and try again.");
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadProducts();
+
+    return () => controller.abort();
+  }, []);
+
   const normalizedQuery = searchQuery.trim().toLowerCase();
   const filteredProducts = products.filter((product) => {
     const matchesSearch = [product.name, product.sku, product.category].some(
@@ -224,6 +224,20 @@ export default function ProductsPage() {
               </thead>
 
               <tbody className="divide-y divide-zinc-800/70">
+                {isLoading && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-14 text-center text-sm text-zinc-400">
+                      Loading products...
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && loadError && (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-14 text-center text-sm text-rose-400">
+                      {loadError}
+                    </td>
+                  </tr>
+                )}
                 {filteredProducts.map((product) => (
                   <tr
                     key={product.id}
@@ -252,7 +266,10 @@ export default function ProductsPage() {
                     </td>
 
                     <td className="px-6 py-5 text-sm font-medium text-zinc-200">
-                      {product.price}
+                      {new Intl.NumberFormat("en-US", {
+                        style: "currency",
+                        currency: "USD",
+                      }).format(Number(product.price))}
                     </td>
 
                     <td className="px-6 py-5 text-sm font-medium text-zinc-200">
@@ -268,19 +285,26 @@ export default function ProductsPage() {
                         <ProductActions
                           productId={product.id}
                           productName={product.name}
+                          onDeleted={(productId) =>
+                            setProducts((current) =>
+                              current.filter((item) => item.id !== productId),
+                            )
+                          }
                         />
                       </div>
                     </td>
                   </tr>
                 ))}
-                {filteredProducts.length === 0 && (
+                {!isLoading && !loadError && filteredProducts.length === 0 && (
                   <tr>
                     <td colSpan={6} className="px-6 py-14 text-center">
                       <p className="text-sm font-medium text-zinc-300">
-                        No products found
+                        {products.length === 0 ? "No products yet" : "No products found"}
                       </p>
                       <p className="mt-1.5 text-sm text-zinc-500">
-                        Try another search or choose a different status filter.
+                        {products.length === 0
+                          ? "Add a product to start building your inventory."
+                          : "Try another search or choose a different status filter."}
                       </p>
                     </td>
                   </tr>
@@ -295,7 +319,7 @@ export default function ProductsPage() {
             </p>
 
             <p className="text-xs text-zinc-600">
-              Inventory data is currently using temporary data.
+              Products are loaded from your inventory database.
             </p>
           </div>
         </section>

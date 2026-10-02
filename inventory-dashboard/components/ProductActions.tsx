@@ -14,25 +14,53 @@ import DeleteDialog from "@/components/DeleteDialog";
 type ProductActionsProps = {
   productId: string;
   productName: string;
+  onDeleted: (productId: string) => void;
 };
 
 export default function ProductActions({
   productId,
   productName,
+  onDeleted,
 }: ProductActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] =
     useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   function handleDeleteClick() {
     setIsOpen(false);
     setIsDeleteDialogOpen(true);
   }
 
-  function handleDeleteConfirm() {
-    console.log("Delete product:", productId);
+  async function handleDeleteConfirm() {
+    setIsDeleting(true);
+    setDeleteError("");
 
-    setIsDeleteDialogOpen(false);
+    const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
+
+    try {
+      const response = await fetch(`${apiUrl}/api/products/${productId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || "Could not delete this product.");
+      }
+
+      onDeleted(productId);
+      setIsDeleteDialogOpen(false);
+    } catch (error) {
+      setDeleteError(
+        error instanceof Error
+          ? error.message
+          : "Could not reach the API. Make sure it is running and try again.",
+      );
+    } finally {
+      setIsDeleting(false);
+    }
   }
 
   return (
@@ -91,6 +119,8 @@ export default function ProductActions({
         itemType="product"
         onClose={() => setIsDeleteDialogOpen(false)}
         onConfirm={handleDeleteConfirm}
+        isBusy={isDeleting}
+        errorMessage={deleteError}
       />
     </>
   );

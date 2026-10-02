@@ -1,19 +1,5 @@
 import Link from "next/link";
-
 import ProductForm from "@/components/ProductForm";
-
-/*? temporary product data */
-
-const product = {
-  name: "Laptop Pro",
-  description:
-    "A high-performance laptop designed for professional work, development, and everyday productivity.",
-  sku: "LP-2026-001",
-  category: "Electronics",
-  price: "1249",
-  quantity: "24",
-  status: "In Stock",
-};
 
 type EditProductPageProps = {
   params: Promise<{
@@ -30,8 +16,6 @@ export default async function EditProductPage({
 
   return (
     <>
-      {/*? page header */}
-
       <header className="flex h-20 items-center border-b border-zinc-800/80 pl-[72px] pr-6 md:px-6 lg:px-10">
         <div>
           <p className="text-sm font-medium text-zinc-300">
@@ -43,40 +27,27 @@ export default async function EditProductPage({
           </p>
         </div>
       </header>
-
-      {/*? page content */}
-
       <div className="px-6 py-10 lg:px-10 lg:py-12">
-        {/*? back navigation */}
-
         <Link
           href={`/products/${id}`}
           className="text-sm font-medium text-zinc-500 transition-colors duration-200 hover:text-emerald-400"
         >
           ← Back to product
         </Link>
-
-        {/*? page introduction */}
-
         <div className="mt-8 max-w-3xl">
           <p className="text-sm font-semibold uppercase tracking-[0.16em] text-emerald-400">
             Inventory
           </p>
-
           <h1 className="mt-4 text-4xl font-semibold leading-tight tracking-tight text-white sm:text-5xl">
             Edit Product
           </h1>
-
           <p className="mt-5 text-base leading-7 text-zinc-400">
             Update the information, pricing, stock, or status of
             this product.
           </p>
         </div>
-
-        {/*? product form */}
-
         <div className="mt-10 max-w-4xl">
-          <ProductForm initialData={product} />
+          <ProductForm productId={id} />
         </div>
       </div>
     </>

@@ -1,28 +1,29 @@
+"use client";
+
+import { useEffect, useReducer } from "react";
 import Link from "next/link";
 import { ArrowRight, FolderKanban, Plus } from "lucide-react";
 
-const categories = [
-  {
-    id: "1",
-    name: "Electronics",
-    description: "Computers, laptops, and electronic devices.",
-    productCount: 24,
-  },
-  {
-    id: "2",
-    name: "Audio",
-    description: "Headphones, speakers, and audio equipment.",
-    productCount: 12,
-  },
-  {
-    id: "3",
-    name: "Accessories",
-    description: "Cables, chargers, cases, and accessories.",
-    productCount: 18,
-  },
-];
+type Category = { id: number; name: string; description: string; productCount: number };
+type State = { categories: Category[]; loading: boolean; error: string };
+type Action = { type: "loaded"; categories: Category[] } | { type: "failed" };
+const initialState: State = { categories: [], loading: true, error: "" };
+function reducer(state: State, action: Action): State {
+  return action.type === "loaded"
+    ? { categories: action.categories, loading: false, error: "" }
+    : { ...state, loading: false, error: "Could not load categories. Check that the API is running and try again." };
+}
 
 export default function CategoriesPage() {
+  const [state, dispatch] = useReducer(reducer, initialState);
+  useEffect(() => {
+    const api = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
+    fetch(`${api}/api/categories`, { credentials: "include" })
+      .then((response) => { if (!response.ok) throw new Error(); return response.json(); })
+      .then((data: { categories: Category[] }) => dispatch({ type: "loaded", categories: data.categories }))
+      .catch(() => dispatch({ type: "failed" }));
+  }, []);
+  const { categories, loading, error } = state;
   return (
     <>
       <header className="flex h-20 items-center border-b border-zinc-800/80 pl-[72px] pr-6 md:px-6 lg:px-10">
@@ -58,6 +59,9 @@ export default function CategoriesPage() {
             Add Category
           </Link>
         </div>
+        {error && <p className="mt-8 text-sm text-rose-400">{error}</p>}
+        {loading && <p className="mt-8 text-sm text-zinc-500">Loading categories…</p>}
+        {!loading && !error && categories.length === 0 && <p className="mt-8 text-sm text-zinc-500">No categories yet. Add a category to organize your products.</p>}
         <div className="mt-10 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
           {categories.map((category) => (
             <article

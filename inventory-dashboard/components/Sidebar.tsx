@@ -2,7 +2,17 @@
 
 import Link from "next/link";
 import { LogOut, X } from "lucide-react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useReducer } from "react";
+
+const api = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
+type LogoutState = { busy: boolean; error: string };
+type LogoutAction = { type: "busy" } | { type: "error" };
+function logoutReducer(_state: LogoutState, action: LogoutAction): LogoutState {
+  return action.type === "busy"
+    ? { busy: true, error: "" }
+    : { busy: false, error: "Could not sign out. Check that the API is running and try again." };
+}
 
 type SidebarProps = {
   isOpen: boolean;
@@ -26,6 +36,21 @@ const navigationItems = [
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [logout, dispatchLogout] = useReducer(logoutReducer, { busy: false, error: "" });
+
+  async function handleSignOut() {
+    dispatchLogout({ type: "busy" });
+    try {
+      const response = await fetch(`${api}/api/auth/logout`, { method: "POST", credentials: "include" });
+      if (!response.ok) throw new Error("Logout failed");
+      onClose();
+      router.replace("/login");
+      router.refresh();
+    } catch {
+      dispatchLogout({ type: "error" });
+    }
+  }
 
   return (
     <aside
@@ -115,17 +140,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             </p>
           </div>
 
-          <Link
-            href="/login"
-            onClick={onClose}
-            className="group mt-4 inline-flex h-11 w-full items-center gap-3 rounded-xl border border-zinc-800/80 px-4 text-sm font-medium text-zinc-400 transition-all duration-200 hover:border-rose-500/25 hover:bg-rose-500/[0.06] hover:text-rose-300"
+          {logout.error && <p role="alert" className="mb-2 text-xs text-rose-300">{logout.error}</p>}
+          <button
+            type="button"
+            onClick={handleSignOut}
+            disabled={logout.busy}
+            className="group mt-4 inline-flex h-11 w-full items-center gap-3 rounded-xl border border-zinc-800/80 px-4 text-sm font-medium text-zinc-400 transition-all duration-200 hover:border-rose-500/25 hover:bg-rose-500/[0.06] hover:text-rose-300 disabled:cursor-wait disabled:opacity-60"
           >
             <LogOut
               size={17}
               className="transition-transform duration-200 group-hover:translate-x-0.5"
             />
-            Sign out
-          </Link>
+            {logout.busy ? "Signing out…" : "Sign out"}
+          </button>
         </div>
       </div>
     </aside>

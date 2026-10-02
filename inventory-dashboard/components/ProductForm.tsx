@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Info, Save } from "lucide-react";
 
 type ProductFormData = {
@@ -10,11 +11,11 @@ type ProductFormData = {
   category: string;
   price: string;
   quantity: string;
-  status: string;
+  lowStockThreshold: string;
 };
 
 type ProductFormProps = {
-  initialData?: ProductFormData;
+  productId?: string;
 };
 
 const defaultFormData: ProductFormData = {
@@ -24,16 +25,63 @@ const defaultFormData: ProductFormData = {
   category: "",
   price: "",
   quantity: "",
-  status: "In Stock",
+  lowStockThreshold: "10",
 };
 
 export default function ProductForm({
-  initialData,
+  productId,
 }: ProductFormProps) {
-  const [formData, setFormData] = useState<ProductFormData>(
-    initialData ?? defaultFormData,
-  );
-  const [showDemoNotice, setShowDemoNotice] = useState(false);
+  const router = useRouter();
+  const isEdit = Boolean(productId);
+  const [formData, setFormData] = useState<ProductFormData>(defaultFormData);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoading, setIsLoading] = useState(isEdit);
+  const [isProductLoaded, setIsProductLoaded] = useState(!isEdit);
+
+  useEffect(() => {
+    if (!productId) return;
+
+    const controller = new AbortController();
+    const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
+
+    async function loadProduct() {
+      try {
+        const response = await fetch(`${apiUrl}/api/products/${productId}`, {
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || "Could not load this product.");
+        }
+
+        const product = result.product;
+        setFormData({
+          name: product.name,
+          description: product.description,
+          sku: product.sku,
+          category: product.category,
+          price: String(product.price),
+          quantity: String(product.stock),
+          lowStockThreshold: String(product.lowStockThreshold),
+        });
+        setIsProductLoaded(true);
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          setErrorMessage(
+            error instanceof Error ? error.message : "Could not load this product.",
+          );
+        }
+      } finally {
+        if (!controller.signal.aborted) setIsLoading(false);
+      }
+    }
+
+    loadProduct();
+    return () => controller.abort();
+  }, [productId]);
 
   function handleChange(
     event: React.ChangeEvent<
@@ -42,16 +90,56 @@ export default function ProductForm({
   ) {
     const { name, value } = event.target;
 
-    setShowDemoNotice(false);
+    setErrorMessage("");
     setFormData((current) => ({
       ...current,
       [name]: value,
     }));
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setShowDemoNotice(true);
+    setErrorMessage("");
+
+    if (!isProductLoaded) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
+
+    try {
+      const response = await fetch(
+        `${apiUrl}/api/products${productId ? `/${productId}` : ""}`,
+        {
+        method: productId ? "PUT" : "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...formData,
+          price: Number(formData.price),
+          quantity: Number(formData.quantity),
+          lowStockThreshold: Number(formData.lowStockThreshold),
+        }),
+        },
+      );
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || "Could not save the product.");
+      }
+
+      router.push("/products");
+      router.refresh();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not reach the API. Make sure it is running and try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -68,6 +156,9 @@ export default function ProductForm({
           <p className="mt-1.5 text-sm text-zinc-500">
             Add or update the main details for your product.
           </p>
+          {isLoading && (
+            <p className="mt-3 text-sm text-zinc-400">Loading product details...</p>
+          )}
         </div>
 
         <div className="mt-8 grid gap-6 md:grid-cols-2">
@@ -193,36 +284,33 @@ export default function ProductForm({
           </div>
           <div>
             <label
-              htmlFor="status"
+              htmlFor="lowStockThreshold"
               className="mb-2 block text-sm font-medium text-zinc-300"
             >
-              Status
+              Low-stock alert at
             </label>
 
-            <select
-              id="status"
-              name="status"
-              value={formData.status}
+            <input
+              id="lowStockThreshold"
+              name="lowStockThreshold"
+              type="number"
+              min="0"
+              value={formData.lowStockThreshold}
               onChange={handleChange}
+              required
               className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm text-zinc-100 outline-none transition-all focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10"
-            >
-              <option value="In Stock">In Stock</option>
-              <option value="Low Stock">Low Stock</option>
-              <option value="Out of Stock">Out of Stock</option>
-            </select>
+            />
           </div>
         </div>
       </div>
-      {showDemoNotice && (
+      {errorMessage && (
         <p
           role="status"
           aria-live="polite"
           className="mx-6 mb-5 flex items-start gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-sm leading-6 text-amber-200 sm:mx-8"
         >
           <Info size={17} className="mt-1 shrink-0 text-amber-400" />
-          {initialData
-            ? "Product details are ready to update, but changes aren’t saved until the backend is connected."
-            : "The product is ready to add, but it won’t be saved until the backend is connected."}
+          {errorMessage}
         </p>
       )}
       <div className="flex flex-col-reverse gap-3 border-t border-zinc-800/80 bg-zinc-950/30 px-6 py-5 sm:flex-row sm:justify-end sm:px-8">
@@ -235,11 +323,12 @@ export default function ProductForm({
 
         <button
           type="submit"
-          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-5 text-sm font-semibold text-zinc-950 shadow-lg shadow-emerald-950/30 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/30"
+          disabled={isSubmitting || isLoading || !isProductLoaded}
+          className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-5 text-sm font-semibold text-zinc-950 shadow-lg shadow-emerald-950/30 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-emerald-900/30 disabled:cursor-wait disabled:opacity-70"
         >
           <Save size={17} />
 
-          {initialData ? "Update Product" : "Save Product"}
+          {isSubmitting ? "Saving..." : isEdit ? "Update Product" : "Save Product"}
         </button>
       </div>
     </form>

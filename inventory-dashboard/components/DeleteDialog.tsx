@@ -7,7 +7,9 @@ type DeleteDialogProps = {
   itemName: string;
   itemType: "product" | "category";
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
+  isBusy?: boolean;
+  errorMessage?: string;
 };
 
 export default function DeleteDialog({
@@ -16,6 +18,8 @@ export default function DeleteDialog({
   itemType,
   onClose,
   onConfirm,
+  isBusy = false,
+  errorMessage = "",
 }: DeleteDialogProps) {
   if (!isOpen) {
     return null;
@@ -74,12 +78,19 @@ export default function DeleteDialog({
           </p>
         </div>
 
+        {errorMessage && (
+          <p role="alert" className="mx-6 mb-5 rounded-xl border border-rose-500/20 bg-rose-500/5 px-4 py-3 text-sm text-rose-300 sm:mx-7">
+            {errorMessage}
+          </p>
+        )}
+
         {/*? actions */}
 
         <div className="flex flex-col-reverse gap-3 border-t border-zinc-800/80 bg-zinc-900/30 px-6 py-5 sm:flex-row sm:justify-end sm:px-7">
           <button
             type="button"
             onClick={onClose}
+            disabled={isBusy}
             className="inline-flex h-10 items-center justify-center rounded-xl border border-zinc-700/80 px-4 text-sm font-medium text-zinc-400 transition-all duration-200 hover:bg-zinc-800 hover:text-white"
           >
             Cancel
@@ -88,10 +99,11 @@ export default function DeleteDialog({
           <button
             type="button"
             onClick={onConfirm}
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-500 px-4 text-sm font-semibold text-white shadow-lg shadow-rose-950/20 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-rose-950/30"
+            disabled={isBusy}
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-500 px-4 text-sm font-semibold text-white shadow-lg shadow-rose-950/20 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl hover:shadow-rose-950/30 disabled:cursor-wait disabled:opacity-70"
           >
             <Trash2 size={16} />
-            Delete {itemType}
+            {isBusy ? "Deleting..." : `Delete ${itemType}`}
           </button>
         </div>
       </div>
