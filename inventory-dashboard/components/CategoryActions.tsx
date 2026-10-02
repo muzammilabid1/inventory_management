@@ -1,57 +1,59 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
-
 import DeleteDialog from "@/components/DeleteDialog";
+import { apiFetch } from "@/lib/api";
 
 type CategoryActionsProps = {
   categoryId: string;
   categoryName: string;
 };
 
-export default function CategoryActions({
-  categoryId,
-  categoryName,
-}: CategoryActionsProps) {
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] =
-    useState(false);
+export default function CategoryActions({ categoryId, categoryName }: CategoryActionsProps) {
+  const router = useRouter();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  function handleDeleteConfirm() {
-    console.log("Delete category:", categoryId);
+  async function handleDeleteConfirm() {
+    setIsDeleting(true);
+    setErrorMessage("");
+    try {
+      const response = await apiFetch(`/api/categories/${categoryId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const result = await response.json();
+        throw new Error(result.error || "Could not delete the category.");
+      }
+      router.replace("/categories");
+      router.refresh();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Could not delete the category.");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
+  function closeDeleteDialog() {
     setIsDeleteDialogOpen(false);
+    setErrorMessage("");
   }
 
   return (
     <>
       <div className="flex gap-3">
-        <Link
-          href={`/categories/${categoryId}/edit`}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-800 px-4 text-sm font-medium text-zinc-300 transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900 hover:text-white"
-        >
-          <Pencil size={16} />
-          Edit
+        <Link href={`/categories/${categoryId}/edit`} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-zinc-800 px-4 text-sm font-medium text-zinc-300 transition-all duration-200 hover:border-zinc-700 hover:bg-zinc-900 hover:text-white">
+          <Pencil size={16} /> Edit
         </Link>
-
-        <button
-          type="button"
-          onClick={() => setIsDeleteDialogOpen(true)}
-          className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-500/20 px-4 text-sm font-medium text-rose-400 transition-all duration-200 hover:bg-rose-500/10"
-        >
-          <Trash2 size={16} />
-          Delete
+        <button type="button" onClick={() => setIsDeleteDialogOpen(true)} className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-rose-500/20 px-4 text-sm font-medium text-rose-400 transition-all duration-200 hover:bg-rose-500/10">
+          <Trash2 size={16} /> Delete
         </button>
       </div>
-
-      <DeleteDialog
-        isOpen={isDeleteDialogOpen}
-        itemName={categoryName}
-        itemType="category"
-        onClose={() => setIsDeleteDialogOpen(false)}
-        onConfirm={handleDeleteConfirm}
-      />
+      <DeleteDialog isOpen={isDeleteDialogOpen} itemName={categoryName} itemType="category" onClose={closeDeleteDialog} onConfirm={handleDeleteConfirm} isBusy={isDeleting} errorMessage={errorMessage} />
     </>
   );
 }

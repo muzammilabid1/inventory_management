@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import ProductActions from "@/components/ProductActions";
 import StatusBadge from "@/components/StatusBadge";
+import { apiFetch } from "@/lib/api";
 
 type ProductStatusFilter =
   | "All"
@@ -30,8 +31,6 @@ type Product = {
   status: Exclude<ProductStatusFilter, "All">;
 };
 
-const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
-
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -45,10 +44,7 @@ export default function ProductsPage() {
 
     async function loadProducts() {
       try {
-        const response = await fetch(`${apiUrl}/api/products`, {
-          signal: controller.signal,
-          credentials: "include",
-        });
+        const response = await apiFetch("/api/products", { signal: controller.signal });
 
         if (!response.ok) {
           throw new Error("The server could not load products.");

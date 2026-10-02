@@ -5,6 +5,7 @@ import { ArrowLeft, CalendarDays, Package, Pencil, Tag } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import StatusBadge from "@/components/StatusBadge";
+import { apiFetch } from "@/lib/api";
 
 type Product = {
   id: string;
@@ -18,8 +19,6 @@ type Product = {
   createdAt: string;
 };
 
-const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
-
 export default function ProductDetails({ productId }: { productId: string }) {
   const [product, setProduct] = useState<Product | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -30,8 +29,7 @@ export default function ProductDetails({ productId }: { productId: string }) {
 
     async function loadProduct() {
       try {
-        const response = await fetch(`${apiUrl}/api/products/${productId}`, {
-          credentials: "include",
+        const response = await apiFetch(`/api/products/${productId}`, {
           signal: controller.signal,
         });
         const result = await response.json();

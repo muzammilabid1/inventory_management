@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Info, Save } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 type ProductFormData = {
   name: string;
@@ -17,6 +18,7 @@ type ProductFormData = {
 type ProductFormProps = {
   productId?: string;
 };
+type CategoryOption = { id: number; name: string };
 
 const defaultFormData: ProductFormData = {
   name: "",
@@ -38,17 +40,33 @@ export default function ProductForm({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(isEdit);
   const [isProductLoaded, setIsProductLoaded] = useState(!isEdit);
+  const [categories, setCategories] = useState<CategoryOption[]>([]);
+  const [categoryLoadError, setCategoryLoadError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    apiFetch("/api/categories", { signal: controller.signal })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not load categories.");
+        setCategories(result.categories);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setCategoryLoadError(error instanceof Error ? error.message : "Could not load categories.");
+        }
+      });
+
+    return () => controller.abort();
+  }, []);
 
   useEffect(() => {
     if (!productId) return;
 
     const controller = new AbortController();
-    const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
-
     async function loadProduct() {
       try {
-        const response = await fetch(`${apiUrl}/api/products/${productId}`, {
-          credentials: "include",
+        const response = await apiFetch(`/api/products/${productId}`, {
           signal: controller.signal,
         });
         const result = await response.json();
@@ -106,14 +124,12 @@ export default function ProductForm({
     }
 
     setIsSubmitting(true);
-    const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
 
     try {
-      const response = await fetch(
-        `${apiUrl}/api/products${productId ? `/${productId}` : ""}`,
+      const response = await apiFetch(
+        `/api/products${productId ? `/${productId}` : ""}`,
         {
         method: productId ? "PUT" : "POST",
-        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...formData,
@@ -236,10 +252,10 @@ export default function ProductForm({
               className="h-11 w-full rounded-xl border border-zinc-700/80 bg-zinc-950/80 px-4 text-sm text-zinc-100 outline-none transition-all focus:border-emerald-500/60 focus:ring-4 focus:ring-emerald-500/10"
             >
               <option value="">Select category</option>
-              <option value="Electronics">Electronics</option>
-              <option value="Audio">Audio</option>
-              <option value="Accessories">Accessories</option>
+              {categories.map((category) => <option key={category.id} value={category.name}>{category.name}</option>)}
             </select>
+            {categoryLoadError && <p role="alert" className="mt-2 text-xs text-rose-300">{categoryLoadError}</p>}
+            {!categoryLoadError && categories.length === 0 && <p className="mt-2 text-xs text-zinc-500">No categories yet. <Link href="/categories/new" className="text-emerald-400 hover:text-emerald-300">Add a category</Link>.</p>}
           </div>
           <div>
             <label

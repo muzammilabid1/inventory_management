@@ -55,6 +55,21 @@ export const productBody = z.object({
   lowStockThreshold: z.coerce.number().int().min(0).max(2_147_483_647).default(10),
 });
 
+export const categoryBody = z.object({
+  name: z.string().trim().min(1, "Category name is required.").max(120, "Category name must be 120 characters or fewer."),
+  description: z.string().trim().max(2000, "Description must be 2000 characters or fewer.").default(""),
+});
+
+export const categoryIdParams = z.object({
+  id: z
+    .string()
+    .regex(/^[1-9]\d{0,18}$/, "Category ID must be a positive integer.")
+    .refine(
+      (value) => /^[1-9]\d{0,18}$/.test(value) && BigInt(value) <= 9_223_372_036_854_775_807n,
+      "Category ID is too large.",
+    ),
+});
+
 export const productIdParams = z.object({
   id: z
     .string()

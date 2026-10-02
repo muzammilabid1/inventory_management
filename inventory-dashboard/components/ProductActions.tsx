@@ -10,6 +10,7 @@ import {
 import { useState } from "react";
 
 import DeleteDialog from "@/components/DeleteDialog";
+import { apiFetch } from "@/lib/api";
 
 type ProductActionsProps = {
   productId: string;
@@ -37,12 +38,9 @@ export default function ProductActions({
     setIsDeleting(true);
     setDeleteError("");
 
-    const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
-
     try {
-      const response = await fetch(`${apiUrl}/api/products/${productId}`, {
+      const response = await apiFetch(`/api/products/${productId}`, {
         method: "DELETE",
-        credentials: "include",
       });
 
       if (!response.ok) {

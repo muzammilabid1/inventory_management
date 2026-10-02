@@ -9,8 +9,10 @@ import {
 import { promisify } from "node:util";
 
 const scrypt = promisify(scryptCallback);
-const sessionCookieName = "inventory_session";
-const sessionDurationSeconds = 60 * 60 * 24 * 7;
+const accessCookieName = "inventory_access";
+const refreshCookieName = "inventory_refresh";
+export const accessTokenDurationSeconds = 60 * 15;
+export const refreshTokenDurationSeconds = 60 * 60 * 24 * 30;
 const sessionSecret =
   process.env.SESSION_SECRET ||
   (process.env.NODE_ENV === "production"
@@ -55,39 +57,61 @@ export function createResetToken() {
   return randomBytes(32).toString("base64url");
 }
 
+export function createRefreshToken() {
+  return randomBytes(32).toString("base64url");
+}
+
 function sign(payload) {
   return createHmac("sha256", sessionSecret).update(payload).digest("base64url");
 }
 
-export function setSessionCookie(response, userId) {
-  const expiresAt = Math.floor(Date.now() / 1000) + sessionDurationSeconds;
+function createAccessToken(userId) {
+  const expiresAt = Math.floor(Date.now() / 1000) + accessTokenDurationSeconds;
   const payload = `${userId}.${expiresAt}`;
-  const value = `${payload}.${sign(payload)}`;
+  return `${payload}.${sign(payload)}`;
+}
+
+function cookieOptions(maxAge) {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-
-  response.setHeader(
-    "Set-Cookie",
-    `${sessionCookieName}=${value}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${sessionDurationSeconds}${secure}`,
-  );
+  return `HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
 }
 
-export function clearSessionCookie(response) {
-  response.setHeader(
-    "Set-Cookie",
-    `${sessionCookieName}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0`,
-  );
+export function setAuthCookies(response, userId, refreshToken, refreshMaxAge = refreshTokenDurationSeconds) {
+  response.setHeader("Set-Cookie", [
+    `${accessCookieName}=${createAccessToken(userId)}; ${cookieOptions(accessTokenDurationSeconds)}`,
+    `${refreshCookieName}=${refreshToken}; ${cookieOptions(refreshMaxAge)}`,
+    `inventory_session=; ${cookieOptions(0)}`,
+  ]);
 }
 
-function readSession(request) {
-  const cookieHeader = request.headers.cookie || "";
-  const cookie = cookieHeader
+function readCookie(request, cookieName) {
+  const cookie = (request.headers.cookie || "")
     .split(";")
     .map((part) => part.trim())
-    .find((part) => part.startsWith(`${sessionCookieName}=`));
-
+    .find((part) => part.startsWith(`${cookieName}=`));
   if (!cookie) return null;
+  try {
+    return decodeURIComponent(cookie.slice(cookieName.length + 1));
+  } catch {
+    return null;
+  }
+}
 
-  const value = decodeURIComponent(cookie.slice(sessionCookieName.length + 1));
+export function getRefreshToken(request) {
+  return readCookie(request, refreshCookieName);
+}
+
+export function clearAuthCookies(response) {
+  response.setHeader("Set-Cookie", [
+    `${accessCookieName}=; ${cookieOptions(0)}`,
+    `${refreshCookieName}=; ${cookieOptions(0)}`,
+    `inventory_session=; ${cookieOptions(0)}`,
+  ]);
+}
+
+function readAccessToken(request) {
+  const value = readCookie(request, accessCookieName);
+  if (!value) return null;
   const [userIdText, expiresAtText, providedSignature] = value.split(".");
   const payload = `${userIdText}.${expiresAtText}`;
   const expectedSignature = sign(payload);
@@ -112,7 +136,7 @@ function readSession(request) {
 }
 
 export function requireAuth(request, response, next) {
-  const userId = readSession(request);
+  const userId = readAccessToken(request);
 
   if (!userId) {
     return response.status(401).json({ error: "Please sign in to continue." });

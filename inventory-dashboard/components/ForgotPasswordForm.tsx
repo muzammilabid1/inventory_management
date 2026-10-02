@@ -6,6 +6,18 @@ import { useRouter } from "next/navigation";
 const api = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
 const inputClass = "h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/10";
 
+async function postRecoveryRequest(path: string, body: Record<string, string>) {
+  const response = await fetch(`${api}/api/auth/${path}`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const result = await response.json();
+  if (!response.ok) throw new Error(result.error || "Could not complete the request.");
+  return result as { resetToken?: string };
+}
+
 type RecoveryState = {
   email: string;
   step: "email" | "code" | "password";
@@ -40,20 +52,18 @@ export default function ForgotPasswordForm() {
     dispatch({ type: "update", values: { error: "", notice: "", busy: true } });
     const values = new FormData(event.currentTarget);
     try {
-      let url = ""; let body: Record<string, string> = {};
-      if (step === "email") { url = "forgot-password"; body = { email }; }
-      else if (step === "code") { url = "verify-reset-code"; body = { email, code: String(values.get("code") || "") }; }
-      else {
+      if (step === "email") {
+        await postRecoveryRequest("forgot-password", { email });
+        dispatch({ type: "update", values: { step: "code", notice: "If an account exists for this email, a code is on its way. Check that the address is correct and look in your inbox or spam folder." } });
+      } else if (step === "code") {
+        const result = await postRecoveryRequest("verify-reset-code", { email, code: String(values.get("code") || "") });
+        dispatch({ type: "update", values: { token: result.resetToken || "", step: "password" } });
+      } else {
         const password = String(values.get("password") || "");
         if (password !== values.get("confirmPassword")) throw new Error("The passwords do not match.");
-        url = "reset-password"; body = { token, password };
+        await postRecoveryRequest("reset-password", { token, password });
+        router.push("/login?passwordReset=1");
       }
-      const response = await fetch(`${api}/api/auth/${url}`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Could not complete the request.");
-      if (step === "email") dispatch({ type: "update", values: { step: "code", notice: "If an account exists for that email, we’ve sent a recovery code. Check your inbox." } });
-      else if (step === "code") dispatch({ type: "update", values: { token: result.resetToken, step: "password" } });
-      else { router.push("/login?passwordReset=1"); }
     } catch (e) { dispatch({ type: "update", values: { error: e instanceof Error ? e.message : "Could not complete the request." } }); }
     finally { dispatch({ type: "update", values: { busy: false } }); }
   }

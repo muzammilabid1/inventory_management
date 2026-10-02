@@ -3,6 +3,7 @@
 import { useEffect, useReducer } from "react";
 import Link from "next/link";
 import { ArrowRight, FolderKanban, Plus } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 
 type Category = { id: number; name: string; description: string; productCount: number };
 type State = { categories: Category[]; loading: boolean; error: string };
@@ -17,8 +18,7 @@ function reducer(state: State, action: Action): State {
 export default function CategoriesPage() {
   const [state, dispatch] = useReducer(reducer, initialState);
   useEffect(() => {
-    const api = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
-    fetch(`${api}/api/categories`, { credentials: "include" })
+    apiFetch("/api/categories")
       .then((response) => { if (!response.ok) throw new Error(); return response.json(); })
       .then((data: { categories: Category[] }) => dispatch({ type: "loaded", categories: data.categories }))
       .catch(() => dispatch({ type: "failed" }));

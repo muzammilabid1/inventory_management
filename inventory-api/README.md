@@ -27,12 +27,18 @@ The API is an Express server backed by PostgreSQL. Run it from this folder with 
 | `POST` | `/api/auth/register` | Public | Create an account and send a verification code. |
 | `POST` | `/api/auth/login` | Public | Check the password and send a sign in code. |
 | `POST` | `/api/auth/verify-code` | Public | Verify registration or sign in code and issue a session. |
+| `POST` | `/api/auth/refresh` | Refresh cookie | Rotate the refresh token and issue a new short-lived access token. |
 | `POST` | `/api/auth/resend-registration-code` | Public | Send another pending registration code. |
 | `POST` | `/api/auth/forgot-password` | Public | Start password recovery without revealing whether an email is registered. |
 | `POST` | `/api/auth/verify-reset-code` | Public | Verify recovery code and issue a one use reset token. |
 | `POST` | `/api/auth/reset-password` | Reset token | Save a new password. |
 | `GET` | `/api/auth/me` | Signed in | Return the current account. |
 | `POST` | `/api/auth/logout` | Public | Clear the session cookie. |
+| `GET` | `/api/categories` | Signed in | List the current user's categories and product counts. |
+| `POST` | `/api/categories` | Signed in | Create a category for the current user. |
+| `GET` | `/api/categories/:id` | Signed in | Read one category and its product count. |
+| `PUT` | `/api/categories/:id` | Signed in | Update a category name and description. |
+| `DELETE` | `/api/categories/:id` | Signed in | Delete an unused category. |
 | `GET` | `/api/health` | Public | Check that the API process is responding. |
 | `GET` | `/api/health/database` | Public | Check PostgreSQL connectivity. |
 | `GET`, `POST` | `/api/products` | Signed in | List or create products owned by the current account. |
@@ -46,4 +52,4 @@ Request rules live in `src/validation/schemas.js`. Route handlers attach them wi
 
 Copy `.env.example` to `.env` and fill in the database settings, `SESSION_SECRET`, `RESEND_API_KEY`, and an `EMAIL_FROM` address verified with Resend. Keep the same `SESSION_SECRET` in the dashboard’s `.env.local` so both apps can validate the session cookie.
 
-Create the database and apply `db/migrations/001_initial_schema.sql`, `002_app_permissions.sql`, `003_auth_challenges.sql`, and `004_auth_challenge_permissions.sql` in that order. Run the permissions migrations as `postgres`. See the repository [setup guide](../README.md) for the full local startup steps.
+Create the database and apply migrations `001` through `006` in numeric order. Run migrations `002`, `004`, `005`, and `006` as `postgres`; migration `005` creates the new refresh-token tables and migration `006` grants the API role access to them. See the repository [setup guide](../README.md) for the full local startup steps.

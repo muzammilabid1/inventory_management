@@ -1,6 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { pool } from "../config/database.js";
-import { clearSessionCookie, createOneTimeCode, createResetToken, hashOneTimeValue, hashPassword, requireAuth, setSessionCookie, verifyPassword } from "../security/auth.js";
+import { accessTokenDurationSeconds, clearAuthCookies, createOneTimeCode, createRefreshToken, createResetToken, getRefreshToken, hashOneTimeValue, hashPassword, requireAuth, setAuthCookies, verifyPassword } from "../security/auth.js";
 import { requireEmailDelivery, sendAuthCodeEmail } from "../services/email.js";
 import { validateBody } from "../middleware/validate.js";
 import { emailBody, loginBody, registerBody, resetCodeBody, resetPasswordBody, verifyCodeBody } from "../validation/schemas.js";
@@ -120,22 +121,111 @@ router.post("/api/auth/login", validateBody(loginBody), requireEmailDelivery, as
 // Email code challenges
 router.post("/api/auth/verify-code", validateBody(verifyCodeBody), async (request, response, next) => {
   const { email, code, purpose } = request.body;
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query("BEGIN");
+    const result = await client.query(
       `SELECT c.id AS challenge_id, c.code_hash, c.attempts, u.id, u.full_name AS "fullName", u.email
        FROM auth_challenges c JOIN users u ON u.id = c.user_id
        WHERE u.email = $1 AND c.purpose = $2 AND c.expires_at > NOW()
-       ORDER BY c.created_at DESC LIMIT 1`, [email, purpose],
+       ORDER BY c.created_at DESC LIMIT 1 FOR UPDATE OF c`, [email, purpose],
     );
     const challenge = result.rows[0];
     if (!challenge || challenge.attempts >= 5 || hashOneTimeValue(code) !== challenge.code_hash) {
-      if (challenge) await pool.query("UPDATE auth_challenges SET attempts = attempts + 1 WHERE id = $1", [challenge.challenge_id]);
+      if (challenge) await client.query("UPDATE auth_challenges SET attempts = attempts + 1 WHERE id = $1", [challenge.challenge_id]);
+      await client.query("COMMIT");
       return response.status(400).json({ error: "That code is invalid or expired. Request a new code and try again." });
     }
-    await pool.query("DELETE FROM auth_challenges WHERE id = $1", [challenge.challenge_id]);
-    setSessionCookie(response, challenge.id);
+    await client.query("DELETE FROM auth_challenges WHERE id = $1", [challenge.challenge_id]);
+    const familyId = randomUUID();
+    const refreshToken = createRefreshToken();
+    const family = await client.query(
+      "INSERT INTO refresh_token_families (id, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '30 days') RETURNING expires_at",
+      [familyId, challenge.id],
+    );
+    await client.query(
+      "INSERT INTO refresh_tokens (family_id, token_hash) VALUES ($1, $2)",
+      [familyId, hashOneTimeValue(refreshToken)],
+    );
+    await client.query("COMMIT");
+    const refreshExpiresAt = new Date(family.rows[0].expires_at).getTime();
+    const refreshMaxAge = Math.max(0, Math.floor((refreshExpiresAt - Date.now()) / 1000));
+    setAuthCookies(response, challenge.id, refreshToken, refreshMaxAge);
     response.json({ user: { id: challenge.id, fullName: challenge.fullName, email: challenge.email } });
-  } catch (error) { next(error); }
+  } catch (error) {
+    await client.query("ROLLBACK");
+    next(error);
+  } finally {
+    client.release();
+  }
+});
+
+router.post("/api/auth/refresh", async (request, response, next) => {
+  const refreshToken = getRefreshToken(request);
+  if (!refreshToken) {
+    clearAuthCookies(response);
+    return response.status(401).json({ error: "Please sign in again." });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await client.query(
+      `SELECT t.id, t.family_id, t.revoked_at AS token_revoked_at, t.replaced_by_id,
+              f.user_id, f.expires_at, f.revoked_at AS family_revoked_at
+       FROM refresh_tokens t
+       JOIN refresh_token_families f ON f.id = t.family_id
+       WHERE t.token_hash = $1
+       FOR UPDATE OF t, f`,
+      [hashOneTimeValue(refreshToken)],
+    );
+    const current = result.rows[0];
+
+    if (!current) {
+      await client.query("ROLLBACK");
+      clearAuthCookies(response);
+      return response.status(401).json({ error: "Please sign in again." });
+    }
+
+    if (current.token_revoked_at) {
+      const recentlyRotated = current.replaced_by_id && Date.now() - new Date(current.token_revoked_at).getTime() < 15_000;
+      if (recentlyRotated) {
+        await client.query("COMMIT");
+        return response.status(409).json({ error: "A newer session token was already issued." });
+      }
+      await client.query("UPDATE refresh_token_families SET revoked_at = COALESCE(revoked_at, NOW()) WHERE id = $1", [current.family_id]);
+      await client.query("COMMIT");
+      clearAuthCookies(response);
+      return response.status(401).json({ error: "This session is no longer valid. Please sign in again." });
+    }
+
+    if (current.family_revoked_at || new Date(current.expires_at).getTime() <= Date.now()) {
+      await client.query("UPDATE refresh_token_families SET revoked_at = COALESCE(revoked_at, NOW()) WHERE id = $1", [current.family_id]);
+      await client.query("COMMIT");
+      clearAuthCookies(response);
+      return response.status(401).json({ error: "This session has expired. Please sign in again." });
+    }
+
+    const replacementToken = createRefreshToken();
+    const replacement = await client.query(
+      "INSERT INTO refresh_tokens (family_id, token_hash) VALUES ($1, $2) RETURNING id",
+      [current.family_id, hashOneTimeValue(replacementToken)],
+    );
+    await client.query(
+      "UPDATE refresh_tokens SET revoked_at = NOW(), replaced_by_id = $1 WHERE id = $2",
+      [replacement.rows[0].id, current.id],
+    );
+    await client.query("COMMIT");
+
+    const refreshMaxAge = Math.max(0, Math.floor((new Date(current.expires_at).getTime() - Date.now()) / 1000));
+    setAuthCookies(response, current.user_id, replacementToken, refreshMaxAge);
+    response.json({ expiresIn: accessTokenDurationSeconds });
+  } catch (error) {
+    await client.query("ROLLBACK");
+    next(error);
+  } finally {
+    client.release();
+  }
 });
 
 router.post("/api/auth/resend-registration-code", validateBody(emailBody), requireEmailDelivery, async (request, response, next) => {
@@ -222,7 +312,8 @@ router.post("/api/auth/reset-password", validateBody(resetPasswordBody), async (
     await pool.query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [passwordHash, reset.user_id]);
     await pool.query("UPDATE password_resets SET token_used_at = NOW() WHERE id = $1", [reset.id]);
     await pool.query("DELETE FROM auth_challenges WHERE user_id = $1", [reset.user_id]);
-    clearSessionCookie(response);
+    await pool.query("UPDATE refresh_token_families SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = $1", [reset.user_id]);
+    clearAuthCookies(response);
     response.json({ message: "Password updated. Please sign in with your new password." });
   } catch (error) { next(error); }
 });
@@ -236,9 +327,23 @@ router.get("/api/auth/me", requireAuth, async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
-router.post("/api/auth/logout", (_request, response) => {
-  clearSessionCookie(response);
-  response.sendStatus(204);
+router.post("/api/auth/logout", async (request, response, next) => {
+  const refreshToken = getRefreshToken(request);
+  try {
+    if (refreshToken) {
+      await pool.query(
+        `UPDATE refresh_token_families f
+         SET revoked_at = COALESCE(f.revoked_at, NOW())
+         FROM refresh_tokens t
+         WHERE t.family_id = f.id AND t.token_hash = $1`,
+        [hashOneTimeValue(refreshToken)],
+      );
+    }
+    clearAuthCookies(response);
+    response.sendStatus(204);
+  } catch (error) {
+    next(error);
+  }
 });
 
 
