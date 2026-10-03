@@ -1,13 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Info, Save } from "lucide-react";
+import { Info, Mail, Save, UserRound } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 
 type OrganizationSettings = {
   organizationName: string;
   phone: string;
   address: string;
+};
+
+type AccountProfile = {
+  fullName: string;
+  email: string;
 };
 
 const emptySettings: OrganizationSettings = {
@@ -17,6 +22,9 @@ const emptySettings: OrganizationSettings = {
 };
 
 export default function SettingsForm() {
+  const [account, setAccount] = useState<AccountProfile | null>(null);
+  const [isAccountLoading, setIsAccountLoading] = useState(true);
+  const [accountError, setAccountError] = useState("");
   const [settings, setSettings] = useState(emptySettings);
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -26,6 +34,21 @@ export default function SettingsForm() {
 
   useEffect(() => {
     const controller = new AbortController();
+    apiFetch("/api/auth/me", { signal: controller.signal })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Could not load account details.");
+        setAccount(result.user);
+      })
+      .catch((error) => {
+        if (!controller.signal.aborted) {
+          setAccountError(error instanceof Error ? error.message : "Could not load account details.");
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsAccountLoading(false);
+      });
+
     apiFetch("/api/settings", { signal: controller.signal })
       .then(async (response) => {
         const result = await response.json();
@@ -66,6 +89,9 @@ export default function SettingsForm() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Could not save settings.");
       setSettings(result.settings);
+      window.dispatchEvent(new CustomEvent("organization-settings-updated", {
+        detail: { organizationName: result.settings.organizationName },
+      }));
       setSuccessMessage("Organization details saved.");
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Could not save settings. Check that the API is running and try again.");
@@ -75,7 +101,33 @@ export default function SettingsForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="max-w-3xl overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50 shadow-2xl shadow-black/20 backdrop-blur-sm">
+    <div className="max-w-3xl space-y-6">
+      <section aria-labelledby="account-details-heading" className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50 shadow-2xl shadow-black/20 backdrop-blur-sm">
+        <div className="space-y-5 p-6 sm:p-8">
+          <div>
+            <h2 id="account-details-heading" className="text-lg font-semibold tracking-tight text-white">Account details</h2>
+            <p className="mt-1.5 text-sm leading-6 text-zinc-500">These sign-in details are read-only and cannot be changed here.</p>
+          </div>
+          {isAccountLoading ? (
+            <p role="status" className="text-sm text-zinc-400">Loading account details...</p>
+          ) : accountError ? (
+            <p role="alert" className="text-sm text-rose-300">{accountError}</p>
+          ) : account ? (
+            <dl className="grid gap-4 sm:grid-cols-2">
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                <dt className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500"><UserRound size={15} />Name</dt>
+                <dd className="mt-2 break-words text-sm font-medium text-zinc-100">{account.fullName}</dd>
+              </div>
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+                <dt className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-zinc-500"><Mail size={15} />Email</dt>
+                <dd className="mt-2 break-all text-sm font-medium text-zinc-100">{account.email}</dd>
+              </div>
+            </dl>
+          ) : null}
+        </div>
+      </section>
+
+      <form onSubmit={handleSubmit} className="overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50 shadow-2xl shadow-black/20 backdrop-blur-sm">
       <div className="space-y-6 p-6 sm:p-8">
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-white">Organization profile</h2>
@@ -115,6 +167,7 @@ export default function SettingsForm() {
           {isSaving ? "Saving..." : "Save settings"}
         </button>
       </div>
-    </form>
+      </form>
+    </div>
   );
 }

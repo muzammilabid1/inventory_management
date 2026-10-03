@@ -1,11 +1,10 @@
 import "dotenv/config";
 import app from "./app.js";
-import { pool } from "./config/database.js";
+import { initializeDatabase, pool } from "./config/database.js";
 
 const port = Number(process.env.API_PORT || 4000);
-const server = app.listen(port, () => {
-  console.log(`Inventory API listening at http://localhost:${port}`);
-});
+await initializeDatabase();
+const server = app.listen(port, () => console.log(`Inventory API listening at http://localhost:${port}`));
 
 for (const signal of ["SIGINT", "SIGTERM"]) {
   process.on(signal, async () => {

@@ -99,7 +99,7 @@ export default function AuthForm({ mode }: AuthFormProps) {
             email: verificationStep ? email : formData.get("email"),
             password: formData.get("password"),
             code,
-            purpose: isRegister ? "register" : "login",
+            purpose: "register",
           }),
         },
       );

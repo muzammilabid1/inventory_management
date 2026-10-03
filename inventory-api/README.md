@@ -15,7 +15,10 @@ The API is an Express server backed by PostgreSQL. Run it from this folder with 
 | `src/middleware/cors.js` | Allows the configured dashboard origin to call the API with cookies. |
 | `src/middleware/error-handler.js` | Converts unhandled route errors into the API's standard error response. |
 | `src/middleware/validate.js` | Parses request bodies and route parameters with Zod before handlers run. |
-| `src/config/database.js` | Validates database settings and creates the PostgreSQL connection pool. |
+| `src/config/database.js` | Creates the TypeORM PostgreSQL data source used by the running API. |
+| `src/data-source.js` | Configures TypeORM entities and migrations for database setup commands. |
+| `src/db/entities.js` | Maps users, products, categories, authentication records, tokens, and organization settings to PostgreSQL tables. |
+| `src/db/migrations/` | TypeORM migration classes that apply the SQL schema changes and record them in `typeorm_migrations`. |
 | `src/security/auth.js` | Password hashing, one time value hashing, session cookies, and the authentication guard. |
 | `src/services/email.js` | Renders responsive MJML messages and sends them through Gmail SMTP with Nodemailer. |
 | `src/validation/schemas.js` | Named Zod schemas for authentication payloads, product payloads, and product IDs. |
@@ -26,8 +29,8 @@ The API is an Express server backed by PostgreSQL. Run it from this folder with 
 | Method | Path | Access | Purpose |
 | --- | --- | --- | --- |
 | `POST` | `/api/auth/register` | Public | Create an account and send a verification code. |
-| `POST` | `/api/auth/login` | Public | Check the password and send a sign in code. |
-| `POST` | `/api/auth/verify-code` | Public | Verify registration or sign in code and issue a session. |
+| `POST` | `/api/auth/login` | Public | Sign in a verified account with email and password. |
+| `POST` | `/api/auth/verify-code` | Public | Verify the signup email code, mark the account verified, and issue its first session. |
 | `POST` | `/api/auth/refresh` | Refresh cookie | Rotate the refresh token and issue a new short-lived access token. |
 | `POST` | `/api/auth/resend-registration-code` | Public | Send another pending registration code. |
 | `POST` | `/api/auth/forgot-password` | Public | Start password recovery without revealing whether an email is registered. |
@@ -52,8 +55,12 @@ Request rules live in `src/validation/schemas.js`. Route handlers attach them wi
 
 New accounts start with no categories. A signed-in user must create a category before adding products; product categories are scoped to that user's account.
 
+Registration requires a six digit email verification code. The API stores `email_verified_at` only after the code is accepted, blocks unverified accounts from signing in, and starts a session after successful verification. Later sign-ins use the verified email and password without a second email code.
+
 ## Environment and database
 
-Copy `.env.example` to `.env` and fill in the database settings, `SESSION_SECRET`, `GMAIL_USER`, and `GMAIL_APP_PASSWORD`. Use a dedicated Google account for the app. In its [Google Account security settings](https://myaccount.google.com/apppasswords), turn on 2-Step Verification, create an App Password for the API, and use that generated password here—not the account's regular password. `EMAIL_FROM` is optional and should use the same address as `GMAIL_USER` unless you configured an authorized Gmail send-as alias. Keep the same `SESSION_SECRET` in the dashboard’s `.env.local` so both apps can validate the session cookie. Keep these email credentials on the API server only. Google may not offer App Passwords to accounts under some security programs or organization policies.
+Copy `.env.example` to `.env`. Set the `DATABASE_*` values to the `inventory_app` role, and set `TYPEORM_DATABASE_USER=postgres` plus `TYPEORM_DATABASE_PASSWORD` to the PostgreSQL administrator account used for migrations. Run `npm.cmd run db:migrate` to apply all pending schema changes through TypeORM; the `typeorm_migrations` table records which ones ran. Do not execute the SQL migration files manually. `synchronize` is disabled so schema changes stay in versioned migrations.
 
-Create the database and apply migrations `001` through `008` in numeric order. Run migrations `002`, `004`, `005`, `006`, and `008` as `postgres`; migrations `007` and `008` create the organization settings table and grant the API role access to it. See the repository [setup guide](../README.md) for the full local startup steps.
+Also set `SESSION_SECRET`, `GMAIL_USER`, and `GMAIL_APP_PASSWORD`. Use a dedicated Google account for the app. In its [Google Account security settings](https://myaccount.google.com/apppasswords), turn on 2-Step Verification, create an App Password for the API, and use that generated password here—not the account's regular password. `EMAIL_FROM` is optional and should use the same address as `GMAIL_USER` unless you configured an authorized Gmail send-as alias. Keep the same `SESSION_SECRET` in the dashboard’s `.env.local` so both apps can validate the session cookie. Keep these email credentials on the API server only. Google may not offer App Passwords to accounts under some security programs or organization policies.
+
+For the complete local startup steps, see the repository [setup guide](../README.md). GitHub migrations reproduce the database structure, but do not contain records from another computer; transfer those separately with a database backup or seed export.

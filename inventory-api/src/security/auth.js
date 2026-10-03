@@ -7,6 +7,8 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import { promisify } from "node:util";
+import { AppDataSource } from "../config/database.js";
+import { User } from "../db/entities.js";
 
 const scrypt = promisify(scryptCallback);
 const accessCookieName = "inventory_access";
@@ -135,13 +137,24 @@ function readAccessToken(request) {
   return userId;
 }
 
-export function requireAuth(request, response, next) {
+export async function requireAuth(request, response, next) {
   const userId = readAccessToken(request);
 
   if (!userId) {
     return response.status(401).json({ error: "Please sign in to continue." });
   }
 
-  request.userId = userId;
-  next();
+  try {
+    const user = await AppDataSource.getRepository(User).findOne({
+      where: { id: userId },
+      select: { id: true, emailVerifiedAt: true },
+    });
+    if (!user?.emailVerifiedAt) {
+      return response.status(401).json({ error: "Please verify your email and sign in to continue." });
+    }
+    request.userId = userId;
+    next();
+  } catch (error) {
+    next(error);
+  }
 }

@@ -51,10 +51,7 @@ router.post("/api/auth/register", validateBody(registerBody), requireEmailDelive
           `SELECT u.id, u.email, u.password_hash
            FROM users u
            WHERE u.email = $1
-             AND EXISTS (
-               SELECT 1 FROM auth_challenges c
-               WHERE c.user_id = u.id AND c.purpose = 'register'
-             )`,
+             AND u.email_verified_at IS NULL`,
           [email],
         );
         const pendingUser = existingResult.rows[0];
@@ -83,11 +80,11 @@ router.post("/api/auth/register", validateBody(registerBody), requireEmailDelive
   }
 });
 
-router.post("/api/auth/login", validateBody(loginBody), requireEmailDelivery, async (request, response, next) => {
+router.post("/api/auth/login", validateBody(loginBody), async (request, response, next) => {
   const { email, password } = request.body;
   try {
     const result = await pool.query(
-      `SELECT id, full_name AS "fullName", email, password_hash
+      `SELECT id, full_name AS "fullName", email, password_hash, email_verified_at
        FROM users WHERE email = $1`,
       [email],
     );
@@ -96,23 +93,46 @@ router.post("/api/auth/login", validateBody(loginBody), requireEmailDelivery, as
     if (!user || !(await verifyPassword(password, user.password_hash))) {
       return response.status(401).json({ error: "Email or password is incorrect." });
     }
+    if (!user.email_verified_at) {
+      return response.status(403).json({ error: "Verify your email to finish creating your account. Return to registration and submit the same details to request a new code." });
+    }
 
-    const code = createOneTimeCode();
-    await pool.query("DELETE FROM auth_challenges WHERE user_id = $1 AND purpose = 'login'", [user.id]);
-    await pool.query(
-      "INSERT INTO auth_challenges (user_id, purpose, code_hash, expires_at) VALUES ($1, 'login', $2, NOW() + INTERVAL '10 minutes')",
-      [user.id, hashOneTimeValue(code)],
-    );
-    await sendAuthCodeEmail({ to: user.email, purpose: "login", code, expiryMinutes: 10 });
-    response.status(202).json({ challengeRequired: true, email: user.email, message: "Enter the verification code sent to your email." });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const familyId = randomUUID();
+      const refreshToken = createRefreshToken();
+      const family = await client.query(
+        "INSERT INTO refresh_token_families (id, user_id, expires_at) VALUES ($1, $2, NOW() + INTERVAL '30 days') RETURNING expires_at",
+        [familyId, user.id],
+      );
+      await client.query(
+        "INSERT INTO refresh_tokens (family_id, token_hash) VALUES ($1, $2)",
+        [familyId, hashOneTimeValue(refreshToken)],
+      );
+      await client.query("COMMIT");
+
+      const refreshExpiresAt = new Date(family.rows[0].expires_at).getTime();
+      const refreshMaxAge = Math.max(0, Math.floor((refreshExpiresAt - Date.now()) / 1000));
+      setAuthCookies(response, user.id, refreshToken, refreshMaxAge);
+      response.json({ user: { id: user.id, fullName: user.fullName, email: user.email } });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      next(error);
+    } finally {
+      client.release();
+    }
   } catch (error) {
     next(error);
   }
 });
 
-// Email code challenges
+// Email code verification completes registration and starts the first session.
 router.post("/api/auth/verify-code", validateBody(verifyCodeBody), async (request, response, next) => {
   const { email, code, purpose } = request.body;
+  if (purpose !== "register") {
+    return response.status(400).json({ error: "Sign in with your email and password. Login codes are no longer used." });
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -128,6 +148,10 @@ router.post("/api/auth/verify-code", validateBody(verifyCodeBody), async (reques
       await client.query("COMMIT");
       return response.status(400).json({ error: "That code is invalid or expired. Request a new code and try again." });
     }
+    await client.query(
+      "UPDATE users SET email_verified_at = COALESCE(email_verified_at, NOW()), updated_at = NOW() WHERE id = $1",
+      [challenge.id],
+    );
     await client.query("DELETE FROM auth_challenges WHERE id = $1", [challenge.challenge_id]);
     const familyId = randomUUID();
     const refreshToken = createRefreshToken();
@@ -167,6 +191,7 @@ router.post("/api/auth/refresh", async (request, response, next) => {
               f.user_id, f.expires_at, f.revoked_at AS family_revoked_at
        FROM refresh_tokens t
        JOIN refresh_token_families f ON f.id = t.family_id
+       JOIN users u ON u.id = f.user_id AND u.email_verified_at IS NOT NULL
        WHERE t.token_hash = $1
        FOR UPDATE OF t, f`,
       [hashOneTimeValue(refreshToken)],
@@ -224,13 +249,17 @@ router.post("/api/auth/resend-registration-code", validateBody(emailBody), requi
   const { email } = request.body;
   try {
     const result = await pool.query(
-      `SELECT c.user_id, c.created_at, u.email FROM auth_challenges c
-       JOIN users u ON u.id = c.user_id WHERE u.email = $1 AND c.purpose = 'register'
-       ORDER BY c.created_at DESC LIMIT 1`, [email],
+      `SELECT u.id AS user_id, u.email, c.created_at FROM users u
+       LEFT JOIN LATERAL (
+         SELECT created_at FROM auth_challenges
+         WHERE user_id = u.id AND purpose = 'register'
+         ORDER BY created_at DESC LIMIT 1
+       ) c ON TRUE
+       WHERE u.email = $1 AND u.email_verified_at IS NULL`, [email],
     );
     const challenge = result.rows[0];
     if (!challenge) return response.json({ message: "If registration is pending, a new code will be sent shortly." });
-    if (Date.now() - new Date(challenge.created_at).getTime() < 60_000) {
+    if (challenge.created_at && Date.now() - new Date(challenge.created_at).getTime() < 60_000) {
       return response.status(429).json({ error: "Please wait one minute before requesting another code." });
     }
     const code = createOneTimeCode();
@@ -303,7 +332,6 @@ router.post("/api/auth/reset-password", validateBody(resetPasswordBody), async (
     const passwordHash = await hashPassword(password);
     await pool.query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2", [passwordHash, reset.user_id]);
     await pool.query("UPDATE password_resets SET token_used_at = NOW() WHERE id = $1", [reset.id]);
-    await pool.query("DELETE FROM auth_challenges WHERE user_id = $1", [reset.user_id]);
     await pool.query("UPDATE refresh_token_families SET revoked_at = COALESCE(revoked_at, NOW()) WHERE user_id = $1", [reset.user_id]);
     clearAuthCookies(response);
     response.json({ message: "Password updated. Please sign in with your new password." });

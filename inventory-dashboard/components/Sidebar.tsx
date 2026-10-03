@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { LogOut, Settings, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useReducer } from "react";
+import { useEffect, useReducer, useState } from "react";
 
 const api = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
 type LogoutState = { busy: boolean; error: string };
@@ -43,6 +43,31 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [logout, dispatchLogout] = useReducer(logoutReducer, { busy: false, error: "" });
+  const [organizationName, setOrganizationName] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(`${api}/api/settings`, { credentials: "include", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) return;
+        const result = await response.json();
+        setOrganizationName(result.settings?.organizationName?.trim() || "");
+      })
+      .catch(() => {
+        // Keep the application name as the fallback if settings are unavailable.
+      });
+
+    function handleOrganizationSettingsUpdated(event: Event) {
+      const update = event as CustomEvent<{ organizationName?: string }>;
+      setOrganizationName(update.detail?.organizationName?.trim() || "");
+    }
+
+    window.addEventListener("organization-settings-updated", handleOrganizationSettingsUpdated);
+    return () => {
+      controller.abort();
+      window.removeEventListener("organization-settings-updated", handleOrganizationSettingsUpdated);
+    };
+  }, []);
 
   async function handleSignOut() {
     dispatchLogout({ type: "busy" });
@@ -71,16 +96,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
             className="group flex items-center gap-3"
           >
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 via-teal-400 to-cyan-500 text-base font-bold text-zinc-950 shadow-lg shadow-emerald-950/30 transition-all duration-300 group-hover:scale-105 group-hover:shadow-emerald-900/40">
-              I
+              {organizationName ? organizationName.charAt(0).toUpperCase() : "I"}
             </div>
 
-            <div>
-              <p className="text-[15px] font-semibold tracking-tight text-white">
-                Inventory
+            {organizationName ? (
+              <p title={organizationName} className="max-w-[150px] truncate text-[15px] font-semibold tracking-tight text-white">
+                {organizationName}
               </p>
-
-              <p className="mt-0.5 text-xs text-zinc-500">Management</p>
-            </div>
+            ) : (
+              <div>
+                <p className="text-[15px] font-semibold tracking-tight text-white">Inventory</p>
+                <p className="mt-0.5 text-xs text-zinc-500">Management</p>
+              </div>
+            )}
           </Link>
 
           <button
