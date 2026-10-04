@@ -118,8 +118,8 @@ export default function ProductsPage() {
           </Link>
         </div>
 
-        <section className="mt-12 overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50 shadow-2xl shadow-black/20 backdrop-blur-sm">
-          <div className="flex flex-col gap-5 border-b border-zinc-800/80 p-6 xl:flex-row xl:items-center xl:justify-between">
+        <section className="mt-8 overflow-hidden rounded-2xl border border-zinc-800/80 bg-zinc-900/50 shadow-2xl shadow-black/20 backdrop-blur-sm sm:mt-12">
+          <div className="flex flex-col gap-5 border-b border-zinc-800/80 p-4 sm:p-6 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <h3 className="text-lg font-semibold tracking-tight text-white">
                 All Products
@@ -189,7 +189,7 @@ export default function ProductsPage() {
             </div>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[900px] text-left">
               <thead>
                 <tr className="border-b border-zinc-800/80 bg-zinc-950/30">
@@ -309,7 +309,63 @@ export default function ProductsPage() {
             </table>
           </div>
 
-          <div className="flex flex-col gap-3 border-t border-zinc-800/80 px-6 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="divide-y divide-zinc-800/70 md:hidden">
+            {isLoading && (
+              <p className="px-4 py-10 text-center text-sm text-zinc-400">Loading products...</p>
+            )}
+            {!isLoading && loadError && (
+              <p className="px-4 py-10 text-center text-sm text-rose-400">{loadError}</p>
+            )}
+            {!isLoading && !loadError && filteredProducts.map((product) => (
+              <article key={product.id} className="p-4 transition-colors hover:bg-zinc-800/20">
+                <div className="flex min-w-0 items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-950 text-sm font-semibold text-zinc-400">
+                    {product.name.charAt(0)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="break-words text-sm font-semibold text-zinc-100">{product.name}</p>
+                        <p className="mt-0.5 break-all text-xs text-zinc-600">{product.sku}</p>
+                      </div>
+                      <ProductActions
+                        productId={product.id}
+                        productName={product.name}
+                        onDeleted={(productId) =>
+                          setProducts((current) => current.filter((item) => item.id !== productId))
+                        }
+                      />
+                    </div>
+                    <p className="mt-2 truncate text-xs text-zinc-500">{product.category}</p>
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-zinc-200">
+                        {new Intl.NumberFormat("en-US", {
+                          style: "currency",
+                          currency: "USD",
+                        }).format(Number(product.price))}
+                        <span className="ml-2 text-xs font-normal text-zinc-500">Stock: {product.stock}</span>
+                      </p>
+                      <StatusBadge status={product.status} />
+                    </div>
+                  </div>
+                </div>
+              </article>
+            ))}
+            {!isLoading && !loadError && filteredProducts.length === 0 && (
+              <div className="px-4 py-10 text-center">
+                <p className="text-sm font-medium text-zinc-300">
+                  {products.length === 0 ? "No products yet" : "No products found"}
+                </p>
+                <p className="mt-1.5 text-sm text-zinc-500">
+                  {products.length === 0
+                    ? "Add a product to start building your inventory."
+                    : "Try another search or choose a different status filter."}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2 border-t border-zinc-800/80 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-6">
             <p className="text-xs text-zinc-600">
               Showing {filteredProducts.length} of {products.length} products
             </p>

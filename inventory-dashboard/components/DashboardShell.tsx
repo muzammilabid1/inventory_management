@@ -45,7 +45,7 @@ export default function DashboardShell({ children }: DashboardShellProps) {
 
       <Sidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
 
-      <section className="min-w-0 md:ml-[clamp(220px,22vw,300px)]">
+      <section className="min-w-0 md:ml-[clamp(220px,22vw,300px)] [&>header]:sticky [&>header]:top-0 [&>header]:z-30 [&>header]:bg-zinc-950/95 [&>header]:backdrop-blur-md">
         {children}
       </section>
     </div>
