@@ -222,7 +222,7 @@ export default function LandingPage() {
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-cyan-500 text-zinc-950 transition-transform duration-300 group-hover:rotate-3"><Boxes size={15} /></span>
             <span className="font-semibold">Inventory</span>
           </Link>
-          <p>Inventory management, made clear.</p>
+          <p>© 2026 Muzammil. All rights reserved.</p>
           <div className="flex items-center gap-5">
             <Link href="/login" className="transition-colors hover:text-zinc-300">Sign in</Link>
             <Link href="/register" className="transition-colors hover:text-zinc-300">Create account</Link>
