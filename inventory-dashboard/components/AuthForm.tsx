@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useReducer } from "react";
 import { ArrowRight, Boxes, Eye, EyeOff, Info, LockKeyhole, Mail, UserRound } from "lucide-react";
+import { apiUrl } from "@/lib/api-url";
 
 type AuthMode = "login" | "register";
 
@@ -65,7 +66,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
     dispatch({ type: "resend-message", message: "" });
     dispatch({ type: "resend-status", value: true });
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
       const response = await fetch(`${apiUrl}/api/auth/resend-registration-code`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
@@ -84,8 +84,6 @@ export default function AuthForm({ mode }: AuthFormProps) {
     dispatch({ type: "submit-status", value: true });
 
     const formData = new FormData(event.currentTarget);
-    const apiUrl = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
-
     try {
       const code = formData.get("code");
       const response = await fetch(

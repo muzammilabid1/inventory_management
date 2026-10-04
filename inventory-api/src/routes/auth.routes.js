@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Router } from "express";
 import { pool } from "../config/database.js";
-import { accessTokenDurationSeconds, clearAuthCookies, createOneTimeCode, createRefreshToken, createResetToken, getRefreshToken, hashOneTimeValue, hashPassword, requireAuth, setAuthCookies, verifyPassword } from "../security/auth.js";
+import { accessTokenDurationSeconds, clearAuthCookies, createOneTimeCode, createRefreshToken, createResetToken, getRefreshToken, hashOneTimeValue, hashPassword, needsPasswordRehash, requireAuth, setAuthCookies, verifyPassword } from "../security/auth.js";
 import { requireEmailDelivery, sendAuthCodeEmail } from "../services/email.js";
 import { validateBody } from "../middleware/validate.js";
 import { emailBody, loginBody, registerBody, resetCodeBody, resetPasswordBody, verifyCodeBody } from "../validation/schemas.js";
@@ -95,6 +95,14 @@ router.post("/api/auth/login", validateBody(loginBody), async (request, response
     }
     if (!user.email_verified_at) {
       return response.status(403).json({ error: "Verify your email to finish creating your account. Return to registration and submit the same details to request a new code." });
+    }
+
+    if (needsPasswordRehash(user.password_hash)) {
+      const upgradedHash = await hashPassword(password);
+      await pool.query(
+        "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2 AND password_hash = $3",
+        [upgradedHash, user.id, user.password_hash],
+      );
     }
 
     const client = await pool.connect();

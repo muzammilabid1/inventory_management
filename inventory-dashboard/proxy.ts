@@ -7,15 +7,30 @@ function hasTrustedAccessCookie(request: NextRequest) {
   const secret = process.env.SESSION_SECRET || (process.env.NODE_ENV === "production" ? "" : "local-development-secret-change-before-deploying");
   const value = request.cookies.get(cookieName)?.value;
   if (!secret || !value) return false;
-  const [userId, expiry, signature] = value.split(".");
-  if (!userId || !expiry || !signature || !/^\d+$/.test(userId) || !/^\d+$/.test(expiry)) return false;
-  const payload = `${userId}.${expiry}`;
-  const expected = createHmac("sha256", secret).update(payload).digest("base64url");
-  const actualBuffer = Buffer.from(signature);
-  const expectedBuffer = Buffer.from(expected);
+  const [encodedHeader, encodedPayload, encodedSignature, extraPart] = value.split(".");
+  if (!encodedHeader || !encodedPayload || !encodedSignature || extraPart) return false;
+
+  try {
+    const header = JSON.parse(Buffer.from(encodedHeader, "base64url").toString("utf8"));
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8"));
+    if (header.alg !== "HS256" || !Number.isSafeInteger(Number(payload.userId)) || Number(payload.userId) < 1) {
+      return false;
+    }
+
+    const expectedBuffer = createHmac("sha256", secret)
+      .update(`${encodedHeader}.${encodedPayload}`)
+      .digest();
+    const actualBuffer = Buffer.from(encodedSignature, "base64url");
+    if (actualBuffer.length !== expectedBuffer.length || !timingSafeEqual(actualBuffer, expectedBuffer)) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
   // An expired but correctly signed access cookie may still have a valid refresh cookie.
   // API routes enforce expiry and the client refreshes access before retrying protected calls.
-  return Number(userId) > 0 && actualBuffer.length === expectedBuffer.length && timingSafeEqual(actualBuffer, expectedBuffer);
+  return true;
 }
 
 export function proxy(request: NextRequest) {

@@ -1,14 +1,16 @@
 import {
   createHash,
-  createHmac,
   randomBytes,
   randomInt,
   scrypt as scryptCallback,
   timingSafeEqual,
 } from "node:crypto";
 import { promisify } from "node:util";
-import { AppDataSource } from "../config/database.js";
-import { User } from "../db/entities.js";
+import argon2 from "argon2";
+import jwt from "jsonwebtoken";
+import { eq } from "drizzle-orm";
+import { db } from "../config/database.js";
+import { users } from "../db/schema.js";
 
 const scrypt = promisify(scryptCallback);
 const accessCookieName = "inventory_access";
@@ -26,12 +28,10 @@ if (!sessionSecret) {
 }
 
 export async function hashPassword(password) {
-  const salt = randomBytes(16).toString("hex");
-  const derivedKey = await scrypt(password, salt, 64);
-  return `scrypt$${salt}$${derivedKey.toString("hex")}`;
+  return argon2.hash(password);
 }
 
-export async function verifyPassword(password, storedHash) {
+async function verifyLegacyScryptPassword(password, storedHash) {
   const [algorithm, salt, storedKeyHex] = storedHash.split("$");
 
   if (algorithm !== "scrypt" || !salt || !storedKeyHex) {
@@ -45,6 +45,22 @@ export async function verifyPassword(password, storedHash) {
     storedKey.length === derivedKey.length &&
     timingSafeEqual(storedKey, derivedKey)
   );
+}
+
+export async function verifyPassword(password, storedHash) {
+  if (storedHash.startsWith("$argon2")) {
+    try {
+      return await argon2.verify(storedHash, password);
+    } catch {
+      return false;
+    }
+  }
+
+  return verifyLegacyScryptPassword(password, storedHash);
+}
+
+export function needsPasswordRehash(storedHash) {
+  return storedHash.startsWith("scrypt$");
 }
 
 export function createOneTimeCode() {
@@ -63,78 +79,61 @@ export function createRefreshToken() {
   return randomBytes(32).toString("base64url");
 }
 
-function sign(payload) {
-  return createHmac("sha256", sessionSecret).update(payload).digest("base64url");
-}
-
 function createAccessToken(userId) {
-  const expiresAt = Math.floor(Date.now() / 1000) + accessTokenDurationSeconds;
-  const payload = `${userId}.${expiresAt}`;
-  return `${payload}.${sign(payload)}`;
+  return jwt.sign({ userId }, sessionSecret, {
+    expiresIn: accessTokenDurationSeconds,
+    algorithm: "HS256",
+  });
 }
 
-function cookieOptions(maxAge) {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+function cookieOptions(maxAgeSeconds) {
+  return {
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+    maxAge: maxAgeSeconds * 1000,
+    secure: process.env.NODE_ENV === "production",
+  };
 }
 
 export function setAuthCookies(response, userId, refreshToken, refreshMaxAge = refreshTokenDurationSeconds) {
-  response.setHeader("Set-Cookie", [
-    `${accessCookieName}=${createAccessToken(userId)}; ${cookieOptions(accessTokenDurationSeconds)}`,
-    `${refreshCookieName}=${refreshToken}; ${cookieOptions(refreshMaxAge)}`,
-    `inventory_session=; ${cookieOptions(0)}`,
-  ]);
-}
-
-function readCookie(request, cookieName) {
-  const cookie = (request.headers.cookie || "")
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith(`${cookieName}=`));
-  if (!cookie) return null;
-  try {
-    return decodeURIComponent(cookie.slice(cookieName.length + 1));
-  } catch {
-    return null;
-  }
+  response.cookie(accessCookieName, createAccessToken(userId), cookieOptions(accessTokenDurationSeconds));
+  response.cookie(refreshCookieName, refreshToken, cookieOptions(refreshMaxAge));
+  response.clearCookie("inventory_session", {
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  });
 }
 
 export function getRefreshToken(request) {
-  return readCookie(request, refreshCookieName);
+  return request.cookies?.[refreshCookieName] || null;
 }
 
 export function clearAuthCookies(response) {
-  response.setHeader("Set-Cookie", [
-    `${accessCookieName}=; ${cookieOptions(0)}`,
-    `${refreshCookieName}=; ${cookieOptions(0)}`,
-    `inventory_session=; ${cookieOptions(0)}`,
-  ]);
+  const options = {
+    httpOnly: true,
+    path: "/",
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+  };
+  response.clearCookie(accessCookieName, options);
+  response.clearCookie(refreshCookieName, options);
+  response.clearCookie("inventory_session", options);
 }
 
 function readAccessToken(request) {
-  const value = readCookie(request, accessCookieName);
+  const value = request.cookies?.[accessCookieName];
   if (!value) return null;
-  const [userIdText, expiresAtText, providedSignature] = value.split(".");
-  const payload = `${userIdText}.${expiresAtText}`;
-  const expectedSignature = sign(payload);
-  const provided = Buffer.from(providedSignature || "", "base64url");
-  const expected = Buffer.from(expectedSignature, "base64url");
-
-  if (
-    provided.length !== expected.length ||
-    !timingSafeEqual(provided, expected)
-  ) {
+  try {
+    const decodedToken = jwt.verify(value, sessionSecret, { algorithms: ["HS256"] });
+    const userId = Number(decodedToken.userId);
+    if (!Number.isSafeInteger(userId) || userId < 1) return null;
+    return userId;
+  } catch {
     return null;
   }
-
-  const userId = Number(userIdText);
-  const expiresAt = Number(expiresAtText);
-
-  if (!Number.isSafeInteger(userId) || userId < 1 || expiresAt <= Date.now() / 1000) {
-    return null;
-  }
-
-  return userId;
 }
 
 export async function requireAuth(request, response, next) {
@@ -145,10 +144,11 @@ export async function requireAuth(request, response, next) {
   }
 
   try {
-    const user = await AppDataSource.getRepository(User).findOne({
-      where: { id: userId },
-      select: { id: true, emailVerifiedAt: true },
-    });
+    const [user] = await db
+      .select({ emailVerifiedAt: users.emailVerifiedAt })
+      .from(users)
+      .where(eq(users.id, BigInt(userId)))
+      .limit(1);
     if (!user?.emailVerifiedAt) {
       return response.status(401).json({ error: "Please verify your email and sign in to continue." });
     }

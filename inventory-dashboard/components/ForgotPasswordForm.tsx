@@ -2,12 +2,12 @@
 
 import { useReducer } from "react";
 import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/api-url";
 
-const api = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
 const inputClass = "h-12 w-full rounded-xl border border-zinc-800 bg-zinc-950/70 px-4 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-emerald-500/50 focus:ring-4 focus:ring-emerald-500/10";
 
 async function postRecoveryRequest(path: string, body: Record<string, string>) {
-  const response = await fetch(`${api}/api/auth/${path}`, {
+  const response = await fetch(`${apiUrl}/api/auth/${path}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json" },

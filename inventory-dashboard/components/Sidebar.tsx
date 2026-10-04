@@ -4,8 +4,8 @@ import Link from "next/link";
 import { LogOut, Settings, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useReducer, useState } from "react";
-
-const api = process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:4000";
+import { apiFetch } from "@/lib/api";
+import { apiUrl } from "@/lib/api-url";
 type LogoutState = { busy: boolean; error: string };
 type LogoutAction = { type: "busy" } | { type: "error" };
 function logoutReducer(_state: LogoutState, action: LogoutAction): LogoutState {
@@ -47,7 +47,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(`${api}/api/settings`, { credentials: "include", signal: controller.signal })
+    apiFetch("/api/settings", { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) return;
         const result = await response.json();
@@ -72,7 +72,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   async function handleSignOut() {
     dispatchLogout({ type: "busy" });
     try {
-      const response = await fetch(`${api}/api/auth/logout`, { method: "POST", credentials: "include" });
+      const response = await fetch(`${apiUrl}/api/auth/logout`, { method: "POST", credentials: "include" });
       if (!response.ok) throw new Error("Logout failed");
       onClose();
       router.replace("/login");

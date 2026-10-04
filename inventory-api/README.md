@@ -15,14 +15,15 @@ The API is an Express server backed by PostgreSQL. Run it from this folder with 
 | `src/middleware/cors.js` | Allows the configured dashboard origin to call the API with cookies. |
 | `src/middleware/error-handler.js` | Converts unhandled route errors into the API's standard error response. |
 | `src/middleware/validate.js` | Parses request bodies and route parameters with Zod before handlers run. |
-| `src/config/database.js` | Creates the TypeORM PostgreSQL data source used by the running API. |
-| `src/data-source.js` | Configures TypeORM entities and migrations for database setup commands. |
-| `src/db/entities.js` | Maps users, products, categories, authentication records, tokens, and organization settings to PostgreSQL tables. |
-| `src/db/migrations/` | TypeORM migration classes that apply the SQL schema changes and record them in `typeorm_migrations`. |
+| `src/config/database.js` | Creates the PostgreSQL connection pool and the Drizzle database instance used by the API. |
+| `src/db/schema.js` | Describes users, products, categories, authentication records, tokens, and organization settings with Drizzle. |
+| `drizzle/` | Generated SQL migrations and their snapshots. |
+| `drizzle.config.js` | Gives Drizzle Kit the schema, migration folder, and PostgreSQL settings. |
+| `src/db/run-migrations.js` | Applies Drizzle migrations and safely adopts databases that already have the complete TypeORM migration history. |
 | `src/security/auth.js` | Password hashing, one time value hashing, session cookies, and the authentication guard. |
 | `src/services/email.js` | Renders responsive MJML messages and sends them through Gmail SMTP with Nodemailer. |
 | `src/validation/schemas.js` | Named Zod schemas for authentication payloads, product payloads, and product IDs. |
-| `db/migrations/` | Database schema and application permission changes, applied in numeric order. |
+| `src/routes/categories.routes.js` | Authenticated category CRUD and product-count queries. |
 
 ## Routes
 
@@ -57,9 +58,19 @@ New accounts start with no categories. A signed-in user must create a category b
 
 Registration requires a six digit email verification code. The API stores `email_verified_at` only after the code is accepted, blocks unverified accounts from signing in, and starts a session after successful verification. Later sign-ins use the verified email and password without a second email code.
 
+Passwords are hashed with Argon2. Existing `scrypt` password hashes are checked during login and upgraded to Argon2 after a successful sign-in. `jsonwebtoken` signs and verifies short lived access tokens. Refresh tokens remain random, stored as hashes in PostgreSQL, and rotated during refresh. Express `cookie-parser` reads the authentication cookies; the API keeps the same cookie names and security settings.
+
 ## Environment and database
 
-Copy `.env.example` to `.env`. Set the `DATABASE_*` values to the `inventory_app` role, and set `TYPEORM_DATABASE_USER=postgres` plus `TYPEORM_DATABASE_PASSWORD` to the PostgreSQL administrator account used for migrations. Run `npm.cmd run db:migrate` to apply all pending schema changes through TypeORM; the `typeorm_migrations` table records which ones ran. Do not execute the SQL migration files manually. `synchronize` is disabled so schema changes stay in versioned migrations.
+Copy `.env.example` to `.env`. For local PostgreSQL, set the `DATABASE_*` values to the `inventory_app` role and set `DRIZZLE_DATABASE_USER=postgres` and `DRIZZLE_DATABASE_PASSWORD` to the administrator account used for migrations and Studio. For hosted PostgreSQL, use `DATABASE_URL` for the application and `DRIZZLE_DATABASE_URL` for migrations and Studio. If the URL already contains `sslmode=require`, leave `DATABASE_SSL` unset. Then use these commands from this folder:
+
+```powershell
+npm.cmd run db:generate  # Create a SQL migration after changing src/db/schema.js
+npm.cmd run db:migrate   # Apply migrations to PostgreSQL
+npm.cmd run db:studio    # Open Drizzle Studio
+```
+
+Do not run generated SQL files manually. Schema changes stay in versioned migrations. The application uses Drizzle for its product, category, organization-settings, and authentication checks. Sign-up, email verification, password recovery, and refresh-token flows keep their parameterized PostgreSQL SQL so their existing transactions and row locks behave the same. Both Drizzle and those SQL queries use the same `pg` connection pool.
 
 Also set `SESSION_SECRET`, `GMAIL_USER`, and `GMAIL_APP_PASSWORD`. Use a dedicated Google account for the app. In its [Google Account security settings](https://myaccount.google.com/apppasswords), turn on 2-Step Verification, create an App Password for the API, and use that generated password here—not the account's regular password. `EMAIL_FROM` is optional and should use the same address as `GMAIL_USER` unless you configured an authorized Gmail send-as alias. Keep the same `SESSION_SECRET` in the dashboard’s `.env.local` so both apps can validate the session cookie. Keep these email credentials on the API server only. Google may not offer App Passwords to accounts under some security programs or organization policies.
 
