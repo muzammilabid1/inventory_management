@@ -84,11 +84,11 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
 
   return (
     <aside
-      className={`fixed inset-y-0 left-0 z-50 w-[72vw] max-w-[280px] border-r border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl transition-transform duration-300 ease-out md:w-[clamp(220px,22vw,300px)] md:translate-x-0 ${
+      className={`fixed inset-y-0 left-0 z-50 w-[72vw] max-w-[280px] overflow-y-auto overscroll-contain border-r border-zinc-800/80 bg-zinc-950/95 backdrop-blur-xl transition-transform duration-300 ease-out md:w-[clamp(220px,22vw,300px)] md:translate-x-0 ${
         isOpen ? "translate-x-0" : "-translate-x-full"
       }`}
     >
-      <div className="flex h-full min-h-screen flex-col">
+      <div className="flex min-h-full flex-col">
         <div className="flex h-20 items-center justify-between border-b border-zinc-800/80 px-6">
           <Link
             href="/dashboard"
